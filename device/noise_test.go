@@ -10,37 +10,45 @@ import (
 	"encoding/binary"
 	"testing"
 
+	"github.com/cloudflare/circl/kem/kyber/kyber512"
 	"golang.zx2c4.com/wireguard/conn"
 	"golang.zx2c4.com/wireguard/tun/tuntest"
 )
 
-func TestCurveWrappers(t *testing.T) {
-	sk1, err := newPrivateKey()
+func TestKem(t *testing.T) {
+	_, sk1, err := kyber512.Scheme().GenerateKeyPair()
 	assertNil(t, err)
 
-	sk2, err := newPrivateKey()
+	_, sk2, err := kyber512.Scheme().GenerateKeyPair()
 	assertNil(t, err)
 
-	pk1 := sk1.publicKey()
-	pk2 := sk2.publicKey()
+	pk1 := sk1.Public()
+	pk2 := sk2.Public()
 
-	ss1, err1 := sk1.sharedSecret(pk2)
-	ss2, err2 := sk2.sharedSecret(pk1)
+	ct1, ss1, err1 := kyber512.Scheme().Encapsulate(pk1)
+	ss1d, err2 := kyber512.Scheme().Decapsulate(sk1, ct1)
 
-	if ss1 != ss2 || err1 != nil || err2 != nil {
+	ct2, ss2, err3 := kyber512.Scheme().Encapsulate(pk2)
+	ss2d, err4 := kyber512.Scheme().Decapsulate(sk1, ct2)
+
+	if !bytes.Equal(ss1, ss1d) || !bytes.Equal(ss2, ss2d) || err1 != nil || err2 != nil || err3 != nil || err4 != nil {
 		t.Fatal("Failed to compute shared secet")
 	}
 }
 
 func randDevice(t *testing.T) *Device {
-	sk, err := newPrivateKey()
+	_, sk, err := kyber512.Scheme().GenerateKeyPair()
+	if err != nil {
+		t.Fatal(err)
+	}
+	skM, err := sk.MarshalBinary()
 	if err != nil {
 		t.Fatal(err)
 	}
 	tun := tuntest.NewChannelTUN()
 	logger := NewLogger(LogLevelError, "")
 	device := NewDevice(tun.TUN(), conn.NewDefaultBind(), logger)
-	device.SetPrivateKey(sk)
+	device.SetPrivateKey(NoisePrivateKey(skM))
 	return device
 }
 
@@ -76,8 +84,8 @@ func TestNoiseHandshake(t *testing.T) {
 
 	assertEqual(
 		t,
-		peer1.handshake.precomputedStaticStatic[:],
-		peer2.handshake.precomputedStaticStatic[:],
+		peer1.handshake.presharedKey[:],
+		peer2.handshake.presharedKey[:],
 	)
 
 	/* simulate handshake */

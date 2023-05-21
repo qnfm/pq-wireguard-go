@@ -278,13 +278,13 @@ func TestConcurrencySafety(t *testing.T) {
 
 	// Change persistent_keepalive_interval concurrently with tunnel use.
 	t.Run("persistentKeepaliveInterval", func(t *testing.T) {
-		var pub NoisePublicKey
-		for key := range pair[0].dev.peers.keyMap {
-			pub = key
-			break
-		}
+		// var pub NoisePublicKey
+		// for key := range pair[0].dev.peers.keyMap {
+		// 	pub = key
+		// 	break
+		// }
 		cfg := uapiCfg(
-			"public_key", hex.EncodeToString(pub[:]),
+			"public_key", "W8SwW4OKkDmAsmE0kqSKVvpSAmiSRwxyOZYbaViquOMYXgR6S+LBRaOe5kwe/+ZETUgsfyVl0nIqjOeUHzYYBjSXuqwD+cUodDAI32WCIyGIs4pwilJVo4tO9XqwbZIonEaNP8WqWzc1yFcASoeYXNq9bEq8iXAk8YS7kUKhv4qrCaA7+wFF4ZcYXmMK3RGF/ckDaPeBEla4n4JxKOC3TtjOZoEghCo1LLxKJacTfvbBSvEztOqFfJYLkKOVrWiwyjOOWmA5u6xqGoMh2BWxVQaUFiuiUSZdmXgND/gvCpSiR5y6IOOAbNoT+PmvJIXD5wCcZmNFiAK39Mt7fGMb1fIZD3KVeSGbx9g2ftt61BqKIKsMRJZEkEPEzfeLL7c7uncFaxiNGTW5lfBYXIkXslgk4BSeXGtM8LYfT7lmvyk/pQeH16sZiXEXOdptefKNFfiRYjPJFXHKjuwMVapkOsZXodyNFzITEOIGjmEROgW48mMGEJphree0n1KqpuALVipY8tzKAMSC9oi2xHVC0nxE0oc+mzcRapqrD5gUYJu5FUA8PNuKyxcC0fudRwRZlok/79k1fBJUJ7q6KcvIfrQ2ZndMNgoyiIxSpYGp4VQNaWcInmLJ80mv+nCGeTmUVUJAJcXPkGM/1cSt44SevDREgsghklEdBGDLoogfF/AVLpWAx3SDr7EUvooYvpqNf6GSFRaxpQSnDyIja6I4bNJx/voSNlhcXdSY/4Bhg7OOpKAVsCKBFBKdLsd4/5ULmDi9bHpF1bR6CrqDgrR1Q8O9BJKO6fWT9Wd0OqVQhPunUriMJnEqeDkPZFYu8aRMr1kS4Do9xekj6LoemuITV6EA+YWUHmrOqPkSYiFGSgFZWjd7rzWzSTI2NEU2A/wfP8yt93GJjxmnZziGykQmWTVb5MNkVGYF2KFw1TMYryNyloiANNllcFJWHfNTPmFinUB84+CS2ShkG1ItKyk3SUDLnpCLbsVv3EbJNhRsazWR57qNsaGNkekyWhHJlzwxSPYd8Fw1cR0eBGp5xqz4f7NO8zA5kNLdq/WpJRoVA+o=",
 			"persistent_keepalive_interval", "1",
 		)
 		for i := 0; i < 1000; i++ {
@@ -295,7 +295,7 @@ func TestConcurrencySafety(t *testing.T) {
 	// Change private keys concurrently with tunnel use.
 	t.Run("privateKey", func(t *testing.T) {
 		bad := uapiCfg("private_key", "7777777777777777777777777777777777777777777777777777777777777777")
-		good := uapiCfg("private_key", hex.EncodeToString(pair[0].dev.staticIdentity.privateKey[:]))
+		good := uapiCfg("private_key", "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")
 		// Set iters to a large number like 1000 to flush out data races quickly.
 		// Don't leave it large. That can cause logical races
 		// in which the handshake is interleaved with key changes

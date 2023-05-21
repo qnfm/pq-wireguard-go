@@ -7,13 +7,10 @@ package device
 
 import (
 	"crypto/hmac"
-	"crypto/rand"
-	"crypto/subtle"
-	"errors"
 	"hash"
 
+	"github.com/cloudflare/circl/kem/kyber/kyber512"
 	"golang.org/x/crypto/blake2s"
-	"golang.org/x/crypto/curve25519"
 )
 
 /* KDF related functions.
@@ -62,13 +59,13 @@ func KDF3(t0, t1, t2 *[blake2s.Size]byte, key, input []byte) {
 	setZero(prk[:])
 }
 
-func isZero(val []byte) bool {
-	acc := 1
-	for _, b := range val {
-		acc &= subtle.ConstantTimeByteEq(b, 0)
-	}
-	return acc == 1
-}
+// func isZero(val []byte) bool {
+// 	acc := 1
+// 	for _, b := range val {
+// 		acc &= subtle.ConstantTimeByteEq(b, 0)
+// 	}
+// 	return acc == 1
+// }
 
 /* This function is not used as pervasively as it should because this is mostly impossible in Go at the moment */
 func setZero(arr []byte) {
@@ -77,32 +74,41 @@ func setZero(arr []byte) {
 	}
 }
 
-func (sk *NoisePrivateKey) clamp() {
-	sk[0] &= 248
-	sk[31] = (sk[31] & 127) | 64
-}
+// func (sk *NoisePrivateKey) clamp() {
+// 	sk[0] &= 248
+// 	sk[31] = (sk[31] & 127) | 64
+// }
 
-func newPrivateKey() (sk NoisePrivateKey, err error) {
-	_, err = rand.Read(sk[:])
-	sk.clamp()
-	return
-}
+// func newPrivateKey() (sk NoisePrivateKey, err error) {
+// 	_, err = rand.Read(sk[:])
+// 	sk.clamp()
+// 	return
+// }
 
+// KEM: Pack sk's pub key
 func (sk *NoisePrivateKey) publicKey() (pk NoisePublicKey) {
-	apk := (*[NoisePublicKeySize]byte)(&pk)
-	ask := (*[NoisePrivateKeySize]byte)(sk)
-	curve25519.ScalarBaseMult(apk, ask)
-	return
-}
-
-var errInvalidPublicKey = errors.New("invalid public key")
-
-func (sk *NoisePrivateKey) sharedSecret(pk NoisePublicKey) (ss [NoisePublicKeySize]byte, err error) {
-	apk := (*[NoisePublicKeySize]byte)(&pk)
-	ask := (*[NoisePrivateKeySize]byte)(sk)
-	curve25519.ScalarMult(&ss, ask, apk)
-	if isZero(ss[:]) {
-		return ss, errInvalidPublicKey
+	// apk := (*[NoisePublicKeySize]byte)(&pk)
+	// ask := (*[NoisePrivateKeySize]byte)(sk)
+	// curve25519.ScalarBaseMult(apk, ask)
+	priv, err := kyber512.Scheme().UnmarshalBinaryPrivateKey((*sk)[:])
+	if err != nil {
+		return NoisePublicKey{}
 	}
-	return ss, nil
+	buf, err := priv.Public().MarshalBinary()
+	if err != nil {
+		return NoisePublicKey{}
+	}
+	return NoisePublicKey(buf)
 }
+
+// var errInvalidPublicKey = errors.New("invalid public key")
+
+// func (sk *NoisePrivateKey) sharedSecret(pk NoisePublicKey) (ss [NoisePublicKeySize]byte, err error) {
+// 	apk := (*[NoisePublicKeySize]byte)(&pk)
+// 	ask := (*[NoisePrivateKeySize]byte)(sk)
+// 	curve25519.ScalarMult(&ss, ask, apk)
+// 	if isZero(ss[:]) {
+// 		return ss, errInvalidPublicKey
+// 	}
+// 	return ss, nil
+// }

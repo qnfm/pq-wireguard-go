@@ -11,6 +11,8 @@ require (
 )
 
 require (
+	github.com/cloudflare/circl v1.3.3
 	github.com/google/btree v1.0.1 // indirect
+	github.com/lukechampine/fastxor v0.0.0-20210322201628-b664bed5a5cc
 	golang.org/x/time v0.0.0-20191024005414-555d28b269f0 // indirect
 )

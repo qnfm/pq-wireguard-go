@@ -12,6 +12,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"golang.org/x/crypto/blake2s"
 	"golang.zx2c4.com/wireguard/conn"
 )
 
@@ -84,7 +85,8 @@ func (device *Device) NewPeer(pk NoisePublicKey) (*Peer, error) {
 	peer.queue.staged = make(chan *[]*QueueOutboundElement, QueueStagedSize)
 
 	// map public key
-	_, ok := device.peers.keyMap[pk]
+	hpk := blake2s.Sum256(pk[:])
+	_, ok := device.peers.keyMap[hpk]
 	if ok {
 		return nil, errors.New("adding existing peer")
 	}
@@ -92,7 +94,7 @@ func (device *Device) NewPeer(pk NoisePublicKey) (*Peer, error) {
 	// pre-compute DH
 	handshake := &peer.handshake
 	handshake.mutex.Lock()
-	handshake.precomputedStaticStatic, _ = device.staticIdentity.privateKey.sharedSecret(pk)
+	// handshake.precomputedStaticStatic, _ = device.staticIdentity.privateKey.sharedSecret(pk)
 	handshake.remoteStatic = pk
 	handshake.mutex.Unlock()
 
@@ -103,7 +105,7 @@ func (device *Device) NewPeer(pk NoisePublicKey) (*Peer, error) {
 	peer.timersInit()
 
 	// add
-	device.peers.keyMap[pk] = peer
+	device.peers.keyMap[hpk] = peer
 
 	return peer, nil
 }

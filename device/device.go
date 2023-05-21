@@ -6,11 +6,14 @@
 package device
 
 import (
+	"crypto/subtle"
 	"runtime"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	"github.com/lukechampine/fastxor"
+	"golang.org/x/crypto/blake2s"
 	"golang.zx2c4.com/wireguard/conn"
 	"golang.zx2c4.com/wireguard/ratelimiter"
 	"golang.zx2c4.com/wireguard/rwcancel"
@@ -55,7 +58,7 @@ type Device struct {
 
 	peers struct {
 		sync.RWMutex // protects keyMap
-		keyMap       map[NoisePublicKey]*Peer
+		keyMap       map[[blake2s.Size]byte]*Peer
 	}
 
 	rate struct {
@@ -126,13 +129,13 @@ func (device *Device) isUp() bool {
 }
 
 // Must hold device.peers.Lock()
-func removePeerLocked(device *Device, peer *Peer, key NoisePublicKey) {
+func removePeerLocked(device *Device, peer *Peer, hk [blake2s.Size]byte) {
 	// stop routing and processing of packets
 	device.allowedips.RemoveByPeer(peer)
 	peer.Stop()
 
 	// remove from peer map
-	delete(device.peers.keyMap, key)
+	delete(device.peers.keyMap, hk)
 }
 
 // changeState attempts to change the device state to match want.
@@ -226,13 +229,18 @@ func (device *Device) IsUnderLoad() bool {
 	return device.rate.underLoadUntil.Load() > now.UnixNano()
 }
 
+// Set the KEM keys
 func (device *Device) SetPrivateKey(sk NoisePrivateKey) error {
 	// lock required resources
 
 	device.staticIdentity.Lock()
 	defer device.staticIdentity.Unlock()
 
-	if sk.Equals(device.staticIdentity.privateKey) {
+	// if sk.Equals(device.staticIdentity.privateKey) {
+	// 	return nil
+	// }
+
+	if subtle.ConstantTimeCompare(sk[:], device.staticIdentity.privateKey[:]) == 1 {
 		return nil
 	}
 
@@ -248,10 +256,10 @@ func (device *Device) SetPrivateKey(sk NoisePrivateKey) error {
 	// remove peers with matching public keys
 
 	publicKey := sk.publicKey()
-	for key, peer := range device.peers.keyMap {
+	for hk, peer := range device.peers.keyMap {
 		if peer.handshake.remoteStatic.Equals(publicKey) {
 			peer.handshake.mutex.RUnlock()
-			removePeerLocked(device, peer, key)
+			removePeerLocked(device, peer, hk)
 			peer.handshake.mutex.RLock()
 		}
 	}
@@ -264,10 +272,13 @@ func (device *Device) SetPrivateKey(sk NoisePrivateKey) error {
 
 	// do static-static DH pre-computations
 
+	buf := make([]byte, NoisePublicKeySize)
 	expiredPeers := make([]*Peer, 0, len(device.peers.keyMap))
 	for _, peer := range device.peers.keyMap {
 		handshake := &peer.handshake
-		handshake.precomputedStaticStatic, _ = device.staticIdentity.privateKey.sharedSecret(handshake.remoteStatic)
+		fastxor.Bytes(buf[:0], handshake.remoteStatic[:], device.staticIdentity.publicKey[:])
+		handshake.presharedKey = blake2s.Sum256(buf[:])
+		// handshake.precomputedStaticStatic, _ = device.staticIdentity.privateKey.sharedSecret(handshake.remoteStatic)
 		expiredPeers = append(expiredPeers, peer)
 	}
 
@@ -294,7 +305,7 @@ func NewDevice(tunDevice tun.Device, bind conn.Bind, logger *Logger) *Device {
 		mtu = DefaultMTU
 	}
 	device.tun.mtu.Store(int32(mtu))
-	device.peers.keyMap = make(map[NoisePublicKey]*Peer)
+	device.peers.keyMap = make(map[[blake2s.Size]byte]*Peer)
 	device.rate.limiter.Init()
 	device.indexTable.Init()
 
@@ -338,21 +349,20 @@ func (device *Device) BatchSize() int {
 	return size
 }
 
-func (device *Device) LookupPeer(pk NoisePublicKey) *Peer {
+func (device *Device) LookupPeer(hpk [blake2s.Size]byte) *Peer {
 	device.peers.RLock()
 	defer device.peers.RUnlock()
-
-	return device.peers.keyMap[pk]
+	return device.peers.keyMap[hpk]
 }
 
-func (device *Device) RemovePeer(key NoisePublicKey) {
+func (device *Device) RemovePeer(hk [blake2s.Size]byte) {
 	device.peers.Lock()
 	defer device.peers.Unlock()
 	// stop peer and remove from routing
 
-	peer, ok := device.peers.keyMap[key]
+	peer, ok := device.peers.keyMap[hk]
 	if ok {
-		removePeerLocked(device, peer, key)
+		removePeerLocked(device, peer, hk)
 	}
 }
 
@@ -364,7 +374,7 @@ func (device *Device) RemoveAllPeers() {
 		removePeerLocked(device, peer, key)
 	}
 
-	device.peers.keyMap = make(map[NoisePublicKey]*Peer)
+	device.peers.keyMap = make(map[[blake2s.Size]byte]*Peer)
 }
 
 func (device *Device) Close() {

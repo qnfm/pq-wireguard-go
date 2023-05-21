@@ -18,6 +18,7 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/crypto/blake2s"
 	"golang.zx2c4.com/wireguard/ipc"
 )
 
@@ -59,17 +60,17 @@ func (device *Device) IpcGetOperation(w io.Writer) error {
 		fmt.Fprintf(buf, format, args...)
 		buf.WriteByte('\n')
 	}
-	keyf := func(prefix string, key *[32]byte) {
-		buf.Grow(len(key)*2 + 2 + len(prefix))
-		buf.WriteString(prefix)
-		buf.WriteByte('=')
-		const hex = "0123456789abcdef"
-		for i := 0; i < len(key); i++ {
-			buf.WriteByte(hex[key[i]>>4])
-			buf.WriteByte(hex[key[i]&0xf])
-		}
-		buf.WriteByte('\n')
-	}
+	// keyf := func(prefix string, key *[kyber512.PrivateKeySize]byte) {
+	// 	buf.Grow(len(key)*2 + 2 + len(prefix))
+	// 	buf.WriteString(prefix)
+	// 	buf.WriteByte('=')
+	// 	const hex = "0123456789abcdef"
+	// 	for i := 0; i < len(key); i++ {
+	// 		buf.WriteByte(hex[key[i]>>4])
+	// 		buf.WriteByte(hex[key[i]&0xf])
+	// 	}
+	// 	buf.WriteByte('\n')
+	// }
 
 	func() {
 		// lock required resources
@@ -86,7 +87,7 @@ func (device *Device) IpcGetOperation(w io.Writer) error {
 		// serialize device related values
 
 		if !device.staticIdentity.privateKey.IsZero() {
-			keyf("private_key", (*[32]byte)(&device.staticIdentity.privateKey))
+			sendf("private_key=%s", ToB64(device.staticIdentity.privateKey[:]))
 		}
 
 		if device.net.port != 0 {
@@ -104,8 +105,8 @@ func (device *Device) IpcGetOperation(w io.Writer) error {
 				peer.RLock()
 				defer peer.RUnlock()
 
-				keyf("public_key", (*[32]byte)(&peer.handshake.remoteStatic))
-				keyf("preshared_key", (*[32]byte)(&peer.handshake.presharedKey))
+				sendf("public_key=%s", ToB64(peer.handshake.remoteStatic[:]))
+				sendf("preshared_key=%s", ToB64(peer.handshake.presharedKey[:]))
 				sendf("protocol_version=1")
 				if peer.endpoint != nil {
 					sendf("endpoint=%s", peer.endpoint.DstToString())
@@ -200,7 +201,7 @@ func (device *Device) handleDeviceLine(key, value string) error {
 	switch key {
 	case "private_key":
 		var sk NoisePrivateKey
-		err := sk.FromMaybeZeroHex(value)
+		err := FromB64(sk[:], value)
 		if err != nil {
 			return ipcErrorf(ipc.IpcErrorInvalid, "failed to set private_key: %w", err)
 		}
@@ -276,7 +277,7 @@ func (peer *ipcSetPeer) handlePostConfig() {
 func (device *Device) handlePublicKeyLine(peer *ipcSetPeer, value string) error {
 	// Load/create the peer we are configuring.
 	var publicKey NoisePublicKey
-	err := publicKey.FromHex(value)
+	err := FromB64(publicKey[:], value)
 	if err != nil {
 		return ipcErrorf(ipc.IpcErrorInvalid, "failed to get peer by public key: %w", err)
 	}
@@ -289,7 +290,8 @@ func (device *Device) handlePublicKeyLine(peer *ipcSetPeer, value string) error 
 	if peer.dummy {
 		peer.Peer = &Peer{}
 	} else {
-		peer.Peer = device.LookupPeer(publicKey)
+		hpk := blake2s.Sum256(publicKey[:])
+		peer.Peer = device.LookupPeer(hpk)
 	}
 
 	peer.created = peer.Peer == nil
@@ -311,7 +313,8 @@ func (device *Device) handlePeerLine(peer *ipcSetPeer, key, value string) error 
 			return ipcErrorf(ipc.IpcErrorInvalid, "failed to set update only, invalid value: %v", value)
 		}
 		if peer.created && !peer.dummy {
-			device.RemovePeer(peer.handshake.remoteStatic)
+			hpk := blake2s.Sum256(peer.handshake.remoteStatic[:])
+			device.RemovePeer(hpk)
 			peer.Peer = &Peer{}
 			peer.dummy = true
 		}
@@ -323,7 +326,8 @@ func (device *Device) handlePeerLine(peer *ipcSetPeer, key, value string) error 
 		}
 		if !peer.dummy {
 			device.log.Verbosef("%v - UAPI: Removing", peer.Peer)
-			device.RemovePeer(peer.handshake.remoteStatic)
+			hpk := blake2s.Sum256(peer.handshake.remoteStatic[:])
+			device.RemovePeer(hpk)
 		}
 		peer.Peer = &Peer{}
 		peer.dummy = true
@@ -332,7 +336,7 @@ func (device *Device) handlePeerLine(peer *ipcSetPeer, key, value string) error 
 		device.log.Verbosef("%v - UAPI: Updating preshared key", peer.Peer)
 
 		peer.handshake.mutex.Lock()
-		err := peer.handshake.presharedKey.FromHex(value)
+		err := FromB64(peer.handshake.presharedKey[:], value)
 		peer.handshake.mutex.Unlock()
 
 		if err != nil {

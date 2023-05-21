@@ -7,6 +7,8 @@ package device
 
 import (
 	"testing"
+
+	"github.com/cloudflare/circl/kem/kyber/kyber512"
 )
 
 func TestCookieMAC1(t *testing.T) {
@@ -17,14 +19,17 @@ func TestCookieMAC1(t *testing.T) {
 		checker   CookieChecker
 	)
 
-	sk, err := newPrivateKey()
+	_, sk, err := kyber512.Scheme().GenerateKeyPair()
 	if err != nil {
 		t.Fatal(err)
 	}
-	pk := sk.publicKey()
-
-	generator.Init(pk)
-	checker.Init(pk)
+	pk := sk.Public()
+	pkM, err := pk.MarshalBinary()
+	if err != nil {
+		t.Fatal(err)
+	}
+	generator.Init(NoisePublicKey(pkM))
+	checker.Init(NoisePublicKey(pkM))
 
 	// check mac1
 
