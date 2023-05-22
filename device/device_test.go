@@ -7,6 +7,7 @@ package device
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/hex"
 	"fmt"
 	"io"
@@ -20,6 +21,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cloudflare/circl/kem/kyber/kyber512"
 	"golang.zx2c4.com/wireguard/conn"
 	"golang.zx2c4.com/wireguard/conn/bindtest"
 	"golang.zx2c4.com/wireguard/tun"
@@ -51,41 +53,55 @@ func uapiCfg(cfg ...string) string {
 // genConfigs generates a pair of configs that connect to each other.
 // The configs use distinct, probably-usable ports.
 func genConfigs(tb testing.TB) (cfgs, endpointCfgs [2]string) {
-	var key1, key2 NoisePrivateKey
-	_, err := rand.Read(key1[:])
+	pk1, sk1, err := kyber512.Scheme().GenerateKeyPair()
 	if err != nil {
-		tb.Errorf("unable to generate private key random bytes: %v", err)
+		tb.Errorf("unable to generate key pair 1: %v", err)
 	}
-	_, err = rand.Read(key2[:])
+	pk2, sk2, err := kyber512.Scheme().GenerateKeyPair()
 	if err != nil {
-		tb.Errorf("unable to generate private key random bytes: %v", err)
+		tb.Errorf("unable to generate key pair 2: %v", err)
 	}
-	pub1, pub2 := key1.publicKey(), key2.publicKey()
+	pk1m, err := pk1.MarshalBinary()
+	if err != nil {
+		tb.Errorf("unable to Marshal public key 1: %v", err)
+	}
+	sk1m, err := sk1.MarshalBinary()
+	if err != nil {
+		tb.Errorf("unable to Marshal private key 1: %v", err)
+	}
+	pk2m, err := pk2.MarshalBinary()
+	if err != nil {
+		tb.Errorf("unable to Marshal public key 2: %v", err)
+	}
+	sk2m, err := sk2.MarshalBinary()
+	if err != nil {
+		tb.Errorf("unable to Marshal private key 2: %v", err)
+	}
 
 	cfgs[0] = uapiCfg(
-		"private_key", hex.EncodeToString(key1[:]),
+		"private_key", base64.StdEncoding.EncodeToString(sk1m),
 		"listen_port", "0",
 		"replace_peers", "true",
-		"public_key", hex.EncodeToString(pub2[:]),
+		"public_key", base64.StdEncoding.EncodeToString(pk2m),
 		"protocol_version", "1",
 		"replace_allowed_ips", "true",
 		"allowed_ip", "1.0.0.2/32",
 	)
 	endpointCfgs[0] = uapiCfg(
-		"public_key", hex.EncodeToString(pub2[:]),
+		"public_key", base64.StdEncoding.EncodeToString(pk2m),
 		"endpoint", "127.0.0.1:%d",
 	)
 	cfgs[1] = uapiCfg(
-		"private_key", hex.EncodeToString(key2[:]),
+		"private_key", base64.StdEncoding.EncodeToString(sk2m),
 		"listen_port", "0",
 		"replace_peers", "true",
-		"public_key", hex.EncodeToString(pub1[:]),
+		"public_key", base64.StdEncoding.EncodeToString(pk1m),
 		"protocol_version", "1",
 		"replace_allowed_ips", "true",
 		"allowed_ip", "1.0.0.1/32",
 	)
 	endpointCfgs[1] = uapiCfg(
-		"public_key", hex.EncodeToString(pub1[:]),
+		"public_key", base64.StdEncoding.EncodeToString(pk1m),
 		"endpoint", "127.0.0.1:%d",
 	)
 	return

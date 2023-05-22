@@ -63,6 +63,13 @@ func main() {
 		return
 	}
 
+	if len(os.Args) == 2 && os.Args[1] == "--keygen" {
+		pk, sk := device.GenerateDeviceKeys()
+		fmt.Printf("public_key=%x\n", pk)
+		fmt.Printf("private_key=%x\n", sk)
+		return
+	}
+
 	warning()
 
 	var foreground bool
@@ -225,6 +232,20 @@ func main() {
 	device := device.NewDevice(tdev, conn.NewDefaultBind(), logger)
 
 	logger.Verbosef("Device started")
+
+	if config {
+		f, err := os.Open(configFile)
+		if err != nil {
+			panic(err)
+		}
+		defer f.Close()
+		err = device.IpcSetOperation(f)
+		if err != nil {
+			panic(err)
+		}
+	}
+	device.PrintDevice()
+	logger.Verbosef("Device configured")
 
 	errs := make(chan error)
 	term := make(chan os.Signal, 1)

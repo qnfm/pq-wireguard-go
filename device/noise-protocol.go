@@ -240,8 +240,8 @@ func (device *Device) CreateMessageInitiation(peer *Peer) (*MessageInitiation, e
 
 	// handshake.mixKey(msg.Ephemeral[:])
 	// handshake.mixHash(msg.Ephemeral[:])
-	handshake.mixKey(ctR)
-	handshake.mixHash(ctR)
+	handshake.mixKey(ctR[:])
+	handshake.mixHash(ctR[:])
 
 	// ss, err := handshake.localEphemeral.sharedSecret(handshake.remoteStatic)
 	// if err != nil {
@@ -253,11 +253,11 @@ func (device *Device) CreateMessageInitiation(peer *Peer) (*MessageInitiation, e
 	aead, _ := chacha20poly1305.New(key[:])
 	hpki := blake2s.Sum256(device.staticIdentity.publicKey[:])
 	aead.Seal(msg.Static[:0], ZeroNonce[:], hpki[:], handshake.hash[:])
-	handshake.mixHash(msg.Static[:])
+	// handshake.mixHash(msg.Static[:])
 
 	KDF1(&key, handshake.chainKey[:], msg.Static[blake2s.Size:blake2s.Size+chacha20poly1305.Overhead])
 	aead, _ = chacha20poly1305.New(key[:])
-	aead.Seal(msg.Ephemeral[:], ZeroNonce[:], pkEm, handshake.hash[:])
+	aead.Seal(msg.Ephemeral[:0], ZeroNonce[:], pkEm[:], handshake.hash[:])
 	// encrypt timestamp
 	// if isZero(handshake.precomputedStaticStatic[:]) {
 	// 	return nil, errInvalidPublicKey
@@ -294,8 +294,8 @@ func (device *Device) ConsumeMessageInitiation(msg *MessageInitiation) *Peer {
 	defer device.staticIdentity.RUnlock()
 
 	mixHash(&hash, &InitialHash, device.staticIdentity.publicKey[:])
-	mixKey(&chainKey, &InitialChainKey, msg.CipherTextS[:])
 	mixHash(&hash, &hash, msg.CipherTextS[:])
+	mixKey(&chainKey, &InitialChainKey, msg.CipherTextS[:])
 
 	// decrypt the hash of static key
 	var hpeerPK [blake2s.Size]byte
@@ -321,7 +321,7 @@ func (device *Device) ConsumeMessageInitiation(msg *MessageInitiation) *Peer {
 		println("Static AEAD not ok")
 		return nil
 	}
-	mixHash(&hash, &hash, msg.Static[:])
+	// mixHash(&hash, &hash, msg.Static[:])
 
 	// decrypt ephemeral public key
 	KDF1(&key, chainKey[:], msg.Static[blake2s.Size:blake2s.Size+chacha20poly1305.Overhead])
@@ -426,7 +426,7 @@ func (device *Device) CreateMessageResponse(peer *Peer) (*MessageResponse, error
 	if err != nil {
 		return nil, err
 	}
-	ssE, ctE, err := kyber512.Scheme().Encapsulate(pkEm)
+	ctE, ssE, err := kyber512.Scheme().Encapsulate(pkEm)
 	// handshake.localEphemeral, err = newPrivateKey()
 	if err != nil {
 		return nil, err
@@ -437,16 +437,16 @@ func (device *Device) CreateMessageResponse(peer *Peer) (*MessageResponse, error
 	if err != nil {
 		return nil, err
 	}
-	ssC, ctC, err := kyber512.Scheme().Encapsulate(pkCm)
+	ctC, ssC, err := kyber512.Scheme().Encapsulate(pkCm)
 	if err != nil {
 		return nil, err
 	}
 	// msg.Ephemeral = handshake.localEphemeral.publicKey()
-	handshake.mixHash(ctE)
-	handshake.mixHash(ctC)
-	handshake.mixKey(ctC)
+	handshake.mixHash(ctE[:])
+	// handshake.mixHash(ctC)
+	// handshake.mixKey(ctC)
 
-	handshake.mixKey(ssE)
+	handshake.mixKey(ssE[:])
 
 	// ss, err := handshake.localEphemeral.sharedSecret(handshake.remoteEphemeral)
 	// if err != nil {
@@ -475,9 +475,9 @@ func (device *Device) CreateMessageResponse(peer *Peer) (*MessageResponse, error
 	handshake.mixHash(tau[:])
 
 	aead, _ := chacha20poly1305.New(key[:])
-	aead.Seal(msg.CipherTextC[:0], ZeroNonce[:], ctC, handshake.hash[:])
+	aead.Seal(msg.CipherTextC[:0], ZeroNonce[:], ctC[:], handshake.hash[:])
 	handshake.mixHash(msg.CipherTextC[:])
-	handshake.mixKey(ssC)
+	handshake.mixKey(ssC[:])
 
 	handshake.state = handshakeResponseCreated
 
@@ -527,9 +527,9 @@ func (device *Device) ConsumeMessageResponse(msg *MessageResponse) *Peer {
 			return false
 		}
 		mixHash(&hash, &handshake.hash, msg.CipherTextE[:])
-		mixHash(&hash, &handshake.hash, msg.CipherTextC[:])
-		mixKey(&chainKey, &handshake.chainKey, msg.CipherTextC[:])
-		mixKey(&chainKey, &handshake.chainKey, ssE)
+		// mixHash(&hash, &handshake.hash, msg.CipherTextC[:])
+		// mixKey(&chainKey, &handshake.chainKey, msg.CipherTextC[:])
+		mixKey(&chainKey, &handshake.chainKey, ssE[:])
 
 		// ss, err := handshake.localEphemeral.sharedSecret(msg.Ephemeral)
 		// if err != nil {
@@ -549,7 +549,7 @@ func (device *Device) ConsumeMessageResponse(msg *MessageResponse) *Peer {
 
 		var tau [blake2s.Size]byte
 		var key [chacha20poly1305.KeySize]byte
-		var ctC [kyber512.SharedKeySize]byte
+		var ctC [kyber512.CiphertextSize]byte
 		KDF3(
 			&chainKey,
 			&tau,
@@ -564,6 +564,7 @@ func (device *Device) ConsumeMessageResponse(msg *MessageResponse) *Peer {
 		aead, _ := chacha20poly1305.New(key[:])
 		_, err = aead.Open(ctC[:0], ZeroNonce[:], msg.CipherTextC[:], hash[:])
 		if err != nil {
+			println("CipherTextC AEAD not ok")
 			return false
 		}
 		skCm, err := kyber512.Scheme().UnmarshalBinaryPrivateKey(device.staticIdentity.privateKey[:])
@@ -572,6 +573,7 @@ func (device *Device) ConsumeMessageResponse(msg *MessageResponse) *Peer {
 		}
 		ssC, err := kyber512.Scheme().Decapsulate(skCm, ctC[:])
 		if err != nil {
+			println("ssC Decap not ok")
 			return false
 		}
 		mixHash(&hash, &hash, msg.CipherTextC[:])

@@ -29,7 +29,7 @@ func TestKem(t *testing.T) {
 	ss1d, err2 := kyber512.Scheme().Decapsulate(sk1, ct1)
 
 	ct2, ss2, err3 := kyber512.Scheme().Encapsulate(pk2)
-	ss2d, err4 := kyber512.Scheme().Decapsulate(sk1, ct2)
+	ss2d, err4 := kyber512.Scheme().Decapsulate(sk2, ct2)
 
 	if !bytes.Equal(ss1, ss1d) || !bytes.Equal(ss2, ss2d) || err1 != nil || err2 != nil || err3 != nil || err4 != nil {
 		t.Fatal("Failed to compute shared secet")

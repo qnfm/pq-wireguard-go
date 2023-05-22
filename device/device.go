@@ -7,11 +7,13 @@ package device
 
 import (
 	"crypto/subtle"
+	"encoding/base64"
 	"runtime"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	"github.com/cloudflare/circl/kem/kyber/kyber512"
 	"github.com/lukechampine/fastxor"
 	"golang.org/x/crypto/blake2s"
 	"golang.zx2c4.com/wireguard/conn"
@@ -276,7 +278,7 @@ func (device *Device) SetPrivateKey(sk NoisePrivateKey) error {
 	expiredPeers := make([]*Peer, 0, len(device.peers.keyMap))
 	for _, peer := range device.peers.keyMap {
 		handshake := &peer.handshake
-		fastxor.Bytes(buf[:0], handshake.remoteStatic[:], device.staticIdentity.publicKey[:])
+		fastxor.Bytes(buf[:], handshake.remoteStatic[:], device.staticIdentity.publicKey[:])
 		handshake.presharedKey = blake2s.Sum256(buf[:])
 		// handshake.precomputedStaticStatic, _ = device.staticIdentity.privateKey.sharedSecret(handshake.remoteStatic)
 		expiredPeers = append(expiredPeers, peer)
@@ -549,4 +551,20 @@ func (device *Device) BindClose() error {
 	err := closeBindLocked(device)
 	device.net.Unlock()
 	return err
+}
+
+func GenerateDeviceKeys() ([]byte, []byte) {
+	sk, pk, err := kyber512.Scheme().GenerateKeyPair()
+	if err != nil {
+		return nil, nil
+	}
+	skM, err := sk.MarshalBinary()
+	if err != nil {
+		return nil, nil
+	}
+	pkM, err := pk.MarshalBinary()
+	if err != nil {
+		return nil, nil
+	}
+	return []byte(base64.StdEncoding.EncodeToString(pkM)), []byte(base64.StdEncoding.EncodeToString(skM))
 }
