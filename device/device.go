@@ -553,6 +553,10 @@ func (device *Device) BindClose() error {
 	return err
 }
 
+func (device *Device) PrintDevice() {
+	device.log.Verbosef("Device info:\nSK: %x\nPK: %x\npeer: %+v\n", device.staticIdentity.privateKey, device.staticIdentity.publicKey, device.peers.keyMap)
+}
+
 func GenerateDeviceKeys() ([]byte, []byte) {
 	sk, pk, err := kyber512.Scheme().GenerateKeyPair()
 	if err != nil {
