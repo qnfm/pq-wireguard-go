@@ -74,28 +74,36 @@ func main() {
 
 	var foreground bool
 	var interfaceName string
+	var config bool = false
+	var configFile string
 	if len(os.Args) < 2 || len(os.Args) > 3 {
 		printUsage()
 		return
 	}
+	nextArg := 1
 
-	switch os.Args[1] {
+	for nextArg < len(os.Args) {
+		switch os.Args[nextArg] {
 
-	case "-f", "--foreground":
-		foreground = true
-		if len(os.Args) != 3 {
-			printUsage()
-			return
+		case "-f", "--foreground":
+			foreground = true
+			nextArg++
+			interfaceName = os.Args[2]
+
+		case "-c", "--config_file":
+			config = true
+			nextArg++
+			configFile = os.Args[nextArg]
+			nextArg++
+		default:
+			foreground = false
+			if len(os.Args) != 2 {
+				printUsage()
+				return
+			}
+			interfaceName = os.Args[nextArg]
+			nextArg++
 		}
-		interfaceName = os.Args[2]
-
-	default:
-		foreground = false
-		if len(os.Args) != 2 {
-			printUsage()
-			return
-		}
-		interfaceName = os.Args[1]
 	}
 
 	if !foreground {
@@ -244,7 +252,7 @@ func main() {
 			panic(err)
 		}
 	}
-	device.PrintDevice()
+	// device.PrintDevice()
 	logger.Verbosef("Device configured")
 
 	errs := make(chan error)
