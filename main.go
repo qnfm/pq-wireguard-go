@@ -65,21 +65,21 @@ func main() {
 
 	if len(os.Args) == 2 && os.Args[1] == "--keygen" {
 		pk, sk := device.GenerateDeviceKeys()
-		fmt.Printf("public_key=%x\n", pk)
-		fmt.Printf("private_key=%x\n", sk)
+		fmt.Printf("public_key=%s\n", pk)
+		fmt.Printf("private_key=%s\n", sk)
 		return
 	}
 
 	warning()
 
-	var foreground bool
+	var foreground bool = false
 	var interfaceName string
 	var config bool = false
 	var configFile string
-	if len(os.Args) < 2 || len(os.Args) > 3 {
-		printUsage()
-		return
-	}
+	// if len(os.Args) < 2 || len(os.Args) > 3 {
+	// 	printUsage()
+	// 	return
+	// }
 	nextArg := 1
 
 	for nextArg < len(os.Args) {
@@ -88,7 +88,7 @@ func main() {
 		case "-f", "--foreground":
 			foreground = true
 			nextArg++
-			interfaceName = os.Args[2]
+			// interfaceName = os.Args[2]
 
 		case "-c", "--config_file":
 			config = true
@@ -96,11 +96,11 @@ func main() {
 			configFile = os.Args[nextArg]
 			nextArg++
 		default:
-			foreground = false
-			if len(os.Args) != 2 {
-				printUsage()
-				return
-			}
+			// foreground = false
+			// if len(os.Args) != 2 {
+			// 	printUsage()
+			// 	return
+			// }
 			interfaceName = os.Args[nextArg]
 			nextArg++
 		}
@@ -252,7 +252,7 @@ func main() {
 			panic(err)
 		}
 	}
-	// device.PrintDevice()
+	device.PrintDevice()
 	logger.Verbosef("Device configured")
 
 	errs := make(chan error)
