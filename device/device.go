@@ -372,8 +372,8 @@ func (device *Device) RemoveAllPeers() {
 	device.peers.Lock()
 	defer device.peers.Unlock()
 
-	for key, peer := range device.peers.keyMap {
-		removePeerLocked(device, peer, key)
+	for hk, peer := range device.peers.keyMap {
+		removePeerLocked(device, peer, hk)
 	}
 
 	device.peers.keyMap = make(map[[blake2s.Size]byte]*Peer)

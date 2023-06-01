@@ -40,7 +40,10 @@ func (device *Device) RoutineTUNEventReader() {
 
 		if event&tun.EventUp != 0 {
 			device.log.Verbosef("Interface up requested")
-			device.Up()
+			err := device.Up()
+			if err != nil {
+				device.log.Verbosef("Interface up failed %v", err)
+			}
 		}
 
 		if event&tun.EventDown != 0 {

@@ -121,7 +121,7 @@ func main() {
 		case "silent":
 			return device.LogLevelSilent
 		}
-		return device.LogLevelError
+		return device.LogLevelVerbose
 	}()
 
 	// open TUN device (or use supplied fd)

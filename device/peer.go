@@ -12,6 +12,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/lukechampine/fastxor"
 	"golang.org/x/crypto/blake2s"
 	"golang.zx2c4.com/wireguard/conn"
 )
@@ -73,6 +74,13 @@ func (device *Device) NewPeer(pk NoisePublicKey) (*Peer, error) {
 		return nil, errors.New("too many peers")
 	}
 
+	// map public key
+	hpk := blake2s.Sum256(pk[:])
+	_, ok := device.peers.keyMap[hpk]
+	if ok {
+		return nil, errors.New("adding existing peer")
+	}
+
 	// create peer
 	peer := new(Peer)
 	peer.Lock()
@@ -84,18 +92,15 @@ func (device *Device) NewPeer(pk NoisePublicKey) (*Peer, error) {
 	peer.queue.inbound = newAutodrainingInboundQueue(device)
 	peer.queue.staged = make(chan *[]*QueueOutboundElement, QueueStagedSize)
 
-	// map public key
-	hpk := blake2s.Sum256(pk[:])
-	_, ok := device.peers.keyMap[hpk]
-	if ok {
-		return nil, errors.New("adding existing peer")
-	}
-
 	// pre-compute DH
 	handshake := &peer.handshake
 	handshake.mutex.Lock()
 	// handshake.precomputedStaticStatic, _ = device.staticIdentity.privateKey.sharedSecret(pk)
 	handshake.remoteStatic = pk
+	buf := make([]byte, NoisePublicKeySize)
+	fastxor.Bytes(buf[:], handshake.remoteStatic[:], device.staticIdentity.publicKey[:])
+	handshake.presharedKey = blake2s.Sum256(buf[:])
+
 	handshake.mutex.Unlock()
 
 	// reset endpoint
