@@ -88,6 +88,7 @@ func (device *Device) NewPeer(pk NoisePublicKey) (*Peer, error) {
 
 	peer.cookieGenerator.Init(pk)
 	peer.device = device
+
 	peer.queue.outbound = newAutodrainingOutboundQueue(device)
 	peer.queue.inbound = newAutodrainingInboundQueue(device)
 	peer.queue.staged = make(chan *[]*QueueOutboundElement, QueueStagedSize)
@@ -95,12 +96,11 @@ func (device *Device) NewPeer(pk NoisePublicKey) (*Peer, error) {
 	// pre-compute DH
 	handshake := &peer.handshake
 	handshake.mutex.Lock()
-	// handshake.precomputedStaticStatic, _ = device.staticIdentity.privateKey.sharedSecret(pk)
-	handshake.remoteStatic = pk
 	buf := make([]byte, NoisePublicKeySize)
-	fastxor.Bytes(buf[:], handshake.remoteStatic[:], device.staticIdentity.publicKey[:])
+	fastxor.Bytes(buf[:], pk[:], device.staticIdentity.publicKey[:])
+	device.log.Verbosef("Self public key:%x, Remote public key:%x", device.staticIdentity.publicKey[:8], pk[:8])
 	handshake.presharedKey = blake2s.Sum256(buf[:])
-
+	handshake.remoteStatic = pk
 	handshake.mutex.Unlock()
 
 	// reset endpoint

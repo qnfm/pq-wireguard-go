@@ -372,8 +372,8 @@ func (device *Device) RemoveAllPeers() {
 	device.peers.Lock()
 	defer device.peers.Unlock()
 
-	for hk, peer := range device.peers.keyMap {
-		removePeerLocked(device, peer, hk)
+	for key, peer := range device.peers.keyMap {
+		removePeerLocked(device, peer, key)
 	}
 
 	device.peers.keyMap = make(map[[blake2s.Size]byte]*Peer)
@@ -558,7 +558,7 @@ func (device *Device) PrintDevice() {
 }
 
 func GenerateDeviceKeys() ([]byte, []byte) {
-	sk, pk, err := kyber512.Scheme().GenerateKeyPair()
+	pk, sk, err := kyber512.Scheme().GenerateKeyPair()
 	if err != nil {
 		return nil, nil
 	}

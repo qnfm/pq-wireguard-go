@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"runtime"
 
 	"golang.org/x/sys/windows"
 
@@ -25,11 +26,43 @@ const (
 )
 
 func main() {
-	if len(os.Args) != 2 {
-		os.Exit(ExitSetupFailed)
+	// if len(os.Args) != 2 {
+	// 	os.Exit(ExitSetupFailed)
+	// }
+	if len(os.Args) == 2 && os.Args[1] == "--version" {
+		fmt.Printf("wireguard-go v%s\n\nUserspace WireGuard daemon for %s-%s.\nInformation available at https://www.wireguard.com.\nCopyright (C) Jason A. Donenfeld <Jason@zx2c4.com>.\n", Version, runtime.GOOS, runtime.GOARCH)
+		return
 	}
-	interfaceName := os.Args[1]
 
+	if len(os.Args) == 2 && os.Args[1] == "--keygen" {
+		pk, sk := device.GenerateDeviceKeys()
+		fmt.Printf("public_key=%s\n", pk)
+		fmt.Printf("private_key=%s\n", sk)
+		return
+	}
+	// interfaceName := os.Args[1]
+	var interfaceName string
+	var config bool = false
+	var configFile string
+	nextArg := 1
+	for nextArg < len(os.Args) {
+		switch os.Args[nextArg] {
+
+		// case "-f", "--foreground":
+		// 	foreground = true
+		// 	nextArg++
+
+		case "-c", "--config_file":
+			config = true
+			nextArg++
+			configFile = os.Args[nextArg]
+			nextArg++
+
+		default:
+			interfaceName = os.Args[nextArg]
+			nextArg++
+		}
+	}
 	fmt.Fprintln(os.Stderr, "Warning: this is a test program for Windows, mainly used for debugging this Go package. For a real WireGuard for Windows client, the repo you want is <https://git.zx2c4.com/wireguard-windows/>, which includes this code as a module.")
 
 	logger := device.NewLogger(
@@ -56,6 +89,20 @@ func main() {
 		os.Exit(ExitSetupFailed)
 	}
 	logger.Verbosef("Device started")
+
+	if config {
+		f, err := os.Open(configFile)
+		if err != nil {
+			panic(err)
+		}
+		defer f.Close()
+		err = device.IpcSetOperation(f)
+		if err != nil {
+			panic(err)
+		}
+	}
+	device.PrintDevice()
+	logger.Verbosef("Device configured")
 
 	uapi, err := ipc.UAPIListen(interfaceName)
 	if err != nil {

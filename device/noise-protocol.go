@@ -431,7 +431,7 @@ func (device *Device) CreateMessageResponse(peer *Peer) (*MessageResponse, error
 	if err != nil {
 		return nil, err
 	}
-	msg.CipherTextE = [768]byte(ctE)
+	msg.CipherTextE = [kyber512.CiphertextSize]byte(ctE)
 
 	pkCm, err := kyber512.Scheme().UnmarshalBinaryPublicKey(handshake.remoteStatic[:])
 	if err != nil {

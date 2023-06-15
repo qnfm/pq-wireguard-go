@@ -318,7 +318,7 @@ func TestConcurrencySafety(t *testing.T) {
 		// such that the private key appears to be unchanging but
 		// other state gets reset, which can cause handshake failures like
 		// "Received packet with invalid mac1".
-		const iters = 1
+		const iters = 10
 		for i := 0; i < iters; i++ {
 			applyCfg(bad)
 			applyCfg(good)
