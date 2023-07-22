@@ -125,7 +125,7 @@ type Handshake struct {
 	mutex                     sync.RWMutex
 	hash                      [blake2s.Size]byte // hash value
 	chainKey                  [blake2s.Size]byte // chain key
-	presharedKey              NoisePresharedKey  // H(pkSC+pkSS)
+	presharedKey              NoisePresharedKey  // H(pkSC[:16]^pkSS[:16])
 	localEphemeral            NoisePrivateKey    // ephemeral secret key
 	localIndex                uint32             // used to clear hash-table
 	remoteIndex               uint32             // index for sending

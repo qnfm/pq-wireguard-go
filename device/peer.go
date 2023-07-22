@@ -96,8 +96,8 @@ func (device *Device) NewPeer(pk NoisePublicKey) (*Peer, error) {
 	// pre-compute DH
 	handshake := &peer.handshake
 	handshake.mutex.Lock()
-	buf := make([]byte, NoisePublicKeySize)
-	fastxor.Bytes(buf[:], pk[:], device.staticIdentity.publicKey[:])
+	buf := make([]byte, 16)
+	fastxor.Block(buf[:], pk[:16], device.staticIdentity.publicKey[:16])
 	device.log.Verbosef("Self public key:%x, Remote public key:%x", device.staticIdentity.publicKey[:8], pk[:8])
 	handshake.presharedKey = blake2s.Sum256(buf[:])
 	handshake.remoteStatic = pk
