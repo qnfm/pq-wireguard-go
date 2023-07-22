@@ -8,12 +8,168 @@ package device
 import (
 	"bytes"
 	"encoding/binary"
+	"fmt"
 	"testing"
 
 	"github.com/cloudflare/circl/kem/kyber/kyber512"
 	"golang.zx2c4.com/wireguard/conn"
 	"golang.zx2c4.com/wireguard/tun/tuntest"
 )
+
+func assertBNil(b *testing.B, err error) {
+	if err != nil {
+		b.Fatal(err)
+	}
+}
+
+func randBDevice(b *testing.B) *Device {
+	_, sk, err := kyber512.Scheme().GenerateKeyPair()
+	assertBNil(b, err)
+	skM, err := sk.MarshalBinary()
+	assertBNil(b, err)
+
+	tun := tuntest.NewChannelTUN()
+	logger := NewLogger(LogLevelError, "")
+	device := NewDevice(tun.TUN(), conn.NewDefaultBind(), logger)
+	device.SetPrivateKey(NoisePrivateKey(skM))
+	return device
+}
+
+func BenchmarkHandshakeServer(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		dev1 := randBDevice(b)
+		dev2 := randBDevice(b)
+
+		peer1, _ := dev2.NewPeer(dev1.staticIdentity.privateKey.publicKey())
+		peer2, _ := dev1.NewPeer(dev2.staticIdentity.privateKey.publicKey())
+
+		peer1.Start()
+		peer2.Start()
+
+		msg1, _ := dev1.CreateMessageInitiation(peer2)
+
+		packet := make([]byte, 0, MessageInitiationSize)
+		writer := bytes.NewBuffer(packet)
+		binary.Write(writer, binary.LittleEndian, msg1)
+
+		b.StartTimer()
+		dev2.ConsumeMessageInitiation(msg1)
+		msg2, _ := dev2.CreateMessageResponse(peer1)
+		b.StopTimer()
+		dev1.ConsumeMessageResponse(msg2)
+
+		dev1.Close()
+		dev2.Close()
+	}
+}
+
+func BenchmarkHandshakeClient(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		b.StopTimer()
+		dev1 := randBDevice(b)
+		dev2 := randBDevice(b)
+
+		peer1, _ := dev2.NewPeer(dev1.staticIdentity.privateKey.publicKey())
+		peer2, _ := dev1.NewPeer(dev2.staticIdentity.privateKey.publicKey())
+
+		peer1.Start()
+		peer2.Start()
+		b.StartTimer()
+		msg1, _ := dev1.CreateMessageInitiation(peer2)
+		b.StopTimer()
+
+		packet := make([]byte, 0, MessageInitiationSize)
+		writer := bytes.NewBuffer(packet)
+		binary.Write(writer, binary.LittleEndian, msg1)
+
+		dev2.ConsumeMessageInitiation(msg1)
+		msg2, _ := dev2.CreateMessageResponse(peer1)
+
+		b.StartTimer()
+		dev1.ConsumeMessageResponse(msg2)
+		b.StopTimer()
+		dev1.Close()
+		dev2.Close()
+		b.StartTimer()
+	}
+}
+
+func BenchmarkHandshake(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		b.StopTimer()
+		dev1 := randBDevice(b)
+		dev2 := randBDevice(b)
+
+		peer1, _ := dev2.NewPeer(dev1.staticIdentity.privateKey.publicKey())
+
+		peer2, _ := dev1.NewPeer(dev2.staticIdentity.privateKey.publicKey())
+
+		peer1.Start()
+		peer2.Start()
+		/* simulate handshake */
+		b.StartTimer()
+		// initiation message
+
+		msg1, _ := dev1.CreateMessageInitiation(peer2)
+
+		packet := make([]byte, 0, MessageInitiationSize)
+		writer := bytes.NewBuffer(packet)
+		binary.Write(writer, binary.LittleEndian, msg1)
+		dev2.ConsumeMessageInitiation(msg1)
+		// response message
+
+		msg2, _ := dev2.CreateMessageResponse(peer1)
+
+		dev1.ConsumeMessageResponse(msg2)
+		b.StopTimer()
+		// key pairs
+
+		// peer1.BeginSymmetricSession()
+		// assertBNil(b, err)
+
+		// peer2.BeginSymmetricSession()
+		// assertBNil(b, err)
+
+		/** can't code test but manualy tested and ok
+		assertEqual(
+			t,
+			peer1.keypairs.next.send,
+			peer2.keypairs.Current().receive)**/
+
+		// key1 := peer1.keypairs.next.Load()
+		// key2 := peer2.keypairs.current
+
+		// // encrypting / decryption test
+		// b.StopTimer()
+		// func() {
+		// 	testMsg := []byte("wireguard test message 1")
+		// 	var out []byte
+		// 	var nonce [12]byte
+		// 	out = key1.send.Seal(nil, nonce[:], testMsg, nil)
+		// 	d, err := key2.receive.Open(out[:0], nonce[:], out, nil)
+		// 	assertBNil(b, err)
+		// 	assertBEqual(b, testMsg[:], d[:])
+		// }()
+
+		// func() {
+		// 	testMsg := []byte("wireguard test message 2")
+		// 	var out []byte
+		// 	var nonce [12]byte
+		// 	out = key2.send.Seal(out, nonce[:], testMsg, nil)
+		// 	out, err := key1.receive.Open(out[:0], nonce[:], out, nil)
+		// 	assertBNil(b, err)
+		// 	assertBEqual(b, testMsg, out)
+
+		// }()
+		dev1.Close()
+		dev2.Close()
+		b.StartTimer()
+	}
+}
+
+func TestNoiseHanshakeSizes(t *testing.T) {
+	fmt.Printf("Message init size %v bytes, message response size %+v bytes\n", MessageInitiationSize, MessageResponseSize)
+}
 
 func TestKem(t *testing.T) {
 	_, sk1, err := kyber512.Scheme().GenerateKeyPair()
@@ -38,13 +194,11 @@ func TestKem(t *testing.T) {
 
 func randDevice(t *testing.T) *Device {
 	_, sk, err := kyber512.Scheme().GenerateKeyPair()
-	if err != nil {
-		t.Fatal(err)
-	}
+	assertNil(t, err)
+
 	skM, err := sk.MarshalBinary()
-	if err != nil {
-		t.Fatal(err)
-	}
+	assertNil(t, err)
+
 	tun := tuntest.NewChannelTUN()
 	logger := NewLogger(LogLevelError, "")
 	device := NewDevice(tun.TUN(), conn.NewDefaultBind(), logger)
@@ -72,13 +226,11 @@ func TestNoiseHandshake(t *testing.T) {
 	defer dev2.Close()
 
 	peer1, err := dev2.NewPeer(dev1.staticIdentity.privateKey.publicKey())
-	if err != nil {
-		t.Fatal(err)
-	}
+	assertNil(t, err)
+
 	peer2, err := dev1.NewPeer(dev2.staticIdentity.privateKey.publicKey())
-	if err != nil {
-		t.Fatal(err)
-	}
+	assertNil(t, err)
+
 	peer1.Start()
 	peer2.Start()
 
@@ -97,7 +249,7 @@ func TestNoiseHandshake(t *testing.T) {
 	msg1, err := dev1.CreateMessageInitiation(peer2)
 	assertNil(t, err)
 
-	packet := make([]byte, 0, 256)
+	packet := make([]byte, 0, 2048)
 	writer := bytes.NewBuffer(packet)
 	err = binary.Write(writer, binary.LittleEndian, msg1)
 	assertNil(t, err)
