@@ -37,6 +37,7 @@ func randBDevice(b *testing.B) *Device {
 
 func BenchmarkHandshakeServer(b *testing.B) {
 	for i := 0; i < b.N; i++ {
+		b.StopTimer()
 		dev1 := randBDevice(b)
 		dev2 := randBDevice(b)
 
@@ -51,15 +52,16 @@ func BenchmarkHandshakeServer(b *testing.B) {
 		packet := make([]byte, 0, MessageInitiationSize)
 		writer := bytes.NewBuffer(packet)
 		binary.Write(writer, binary.LittleEndian, msg1)
-
+		//Server side
 		b.StartTimer()
 		dev2.ConsumeMessageInitiation(msg1)
 		msg2, _ := dev2.CreateMessageResponse(peer1)
 		b.StopTimer()
+		//end
 		dev1.ConsumeMessageResponse(msg2)
-
 		dev1.Close()
 		dev2.Close()
+		b.StartTimer()
 	}
 }
 
@@ -74,10 +76,11 @@ func BenchmarkHandshakeClient(b *testing.B) {
 
 		peer1.Start()
 		peer2.Start()
+		//Client side
 		b.StartTimer()
 		msg1, _ := dev1.CreateMessageInitiation(peer2)
 		b.StopTimer()
-
+		//end
 		packet := make([]byte, 0, MessageInitiationSize)
 		writer := bytes.NewBuffer(packet)
 		binary.Write(writer, binary.LittleEndian, msg1)
@@ -85,9 +88,12 @@ func BenchmarkHandshakeClient(b *testing.B) {
 		dev2.ConsumeMessageInitiation(msg1)
 		msg2, _ := dev2.CreateMessageResponse(peer1)
 
+		//Client side
 		b.StartTimer()
 		dev1.ConsumeMessageResponse(msg2)
 		b.StopTimer()
+		//end
+
 		dev1.Close()
 		dev2.Close()
 		b.StartTimer()
