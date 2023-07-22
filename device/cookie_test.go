@@ -8,7 +8,7 @@ package device
 import (
 	"testing"
 
-	"github.com/cloudflare/circl/kem/kyber/kyber512"
+	"github.com/cloudflare/circl/kem/mceliece/mceliece348864f"
 )
 
 func TestCookieMAC1(t *testing.T) {
@@ -19,7 +19,7 @@ func TestCookieMAC1(t *testing.T) {
 		checker   CookieChecker
 	)
 
-	_, sk, err := kyber512.Scheme().GenerateKeyPair()
+	_, sk, err := mceliece348864f.Scheme().GenerateKeyPair()
 	if err != nil {
 		t.Fatal(err)
 	}

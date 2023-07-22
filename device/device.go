@@ -13,7 +13,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/cloudflare/circl/kem/kyber/kyber512"
+	"github.com/cloudflare/circl/kem/mceliece/mceliece348864f"
 	"github.com/lukechampine/fastxor"
 	"golang.org/x/crypto/blake2s"
 	"golang.zx2c4.com/wireguard/conn"
@@ -558,7 +558,7 @@ func (device *Device) PrintDevice() {
 }
 
 func GenerateDeviceKeys() ([]byte, []byte) {
-	pk, sk, err := kyber512.Scheme().GenerateKeyPair()
+	pk, sk, err := mceliece348864f.Scheme().GenerateKeyPair()
 	if err != nil {
 		return nil, nil
 	}

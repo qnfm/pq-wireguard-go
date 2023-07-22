@@ -9,12 +9,12 @@ import (
 	"crypto/subtle"
 	"encoding/base64"
 
-	"github.com/cloudflare/circl/kem/kyber/kyber512"
+	"github.com/cloudflare/circl/kem/mceliece/mceliece348864f"
 )
 
 const (
-	NoisePublicKeySize    = kyber512.PublicKeySize
-	NoisePrivateKeySize   = kyber512.PrivateKeySize
+	NoisePublicKeySize    = mceliece348864f.PublicKeySize
+	NoisePrivateKeySize   = mceliece348864f.PrivateKeySize
 	NoisePresharedKeySize = 32
 )
 
