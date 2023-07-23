@@ -11,7 +11,7 @@ require (
 )
 
 require (
-	github.com/klauspost/cpuid/v2 v2.0.12 // indirect
+	github.com/klauspost/cpuid/v2 v2.2.5 // indirect
 	github.com/zeebo/blake3 v0.2.3 // indirect
 )
 
@@ -19,7 +19,8 @@ require (
 	github.com/cloudflare/circl v1.3.3
 	github.com/google/btree v1.1.2 // indirect
 	github.com/lukechampine/fastxor v0.0.0-20210322201628-b664bed5a5cc
+	github.com/open-quantum-safe/liboqs-go v0.0.0-20230705192921-cf9c63b76ce6
 	golang.org/x/time v0.3.0 // indirect
 )
 
-replace github.com/cloudflare/circl => ../../../qnfm/circl/
+replace github.com/cloudflare/circl => ../qnfm/circl/

@@ -232,7 +232,7 @@ func (device *Device) IsUnderLoad() bool {
 }
 
 // Set the KEM keys
-func (device *Device) SetPrivateKey(sk NoisePrivateKey) error {
+func (device *Device) SetPrivateKey(sk [NoisePrivateKeySize]byte, pk [NoisePublicKeySize]byte) error {
 	// lock required resources
 
 	device.staticIdentity.Lock()
@@ -257,9 +257,8 @@ func (device *Device) SetPrivateKey(sk NoisePrivateKey) error {
 
 	// remove peers with matching public keys
 
-	publicKey := sk.publicKey()
 	for hk, peer := range device.peers.keyMap {
-		if peer.handshake.remoteStatic.Equals(publicKey) {
+		if peer.handshake.remoteStatic.Equals(pk) {
 			peer.handshake.mutex.RUnlock()
 			removePeerLocked(device, peer, hk)
 			peer.handshake.mutex.RLock()
@@ -268,9 +267,9 @@ func (device *Device) SetPrivateKey(sk NoisePrivateKey) error {
 
 	// update key material
 
-	device.staticIdentity.privateKey = sk
-	device.staticIdentity.publicKey = publicKey
-	device.cookieChecker.Init(publicKey)
+	device.staticIdentity.privateKey = NoisePrivateKey(sk[:NoisePrivateKeySize])
+	device.staticIdentity.publicKey = pk
+	device.cookieChecker.Init(pk)
 
 	// do static-static DH pre-computations
 

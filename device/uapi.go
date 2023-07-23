@@ -200,13 +200,14 @@ func (device *Device) IpcSetOperation(r io.Reader) (err error) {
 func (device *Device) handleDeviceLine(key, value string) error {
 	switch key {
 	case "private_key":
-		var sk NoisePrivateKey
-		err := FromB64(sk[:], value)
+		var spk [NoisePrivateKeySize + NoisePublicKeySize]byte
+		err := FromB64(spk[:], value)
 		if err != nil {
 			return ipcErrorf(ipc.IpcErrorInvalid, "failed to set private_key: %w", err)
 		}
 		device.log.Verbosef("UAPI: Updating private key")
-		device.SetPrivateKey(sk)
+		//spk:secretkey||publickey
+		device.SetPrivateKey(NoisePrivateKey(spk[:NoisePrivateKeySize]), NoisePublicKey(spk[NoisePrivateKeySize:NoisePrivateKeySize+NoisePublicKeySize]))
 
 	case "listen_port":
 		port, err := strconv.ParseUint(value, 10, 16)

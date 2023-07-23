@@ -8,13 +8,11 @@ package device
 import (
 	"crypto/subtle"
 	"encoding/base64"
-
-	"github.com/cloudflare/circl/kem/kyber/kyber512"
 )
 
 const (
-	NoisePublicKeySize    = kyber512.PublicKeySize
-	NoisePrivateKeySize   = kyber512.PrivateKeySize
+	NoisePublicKeySize    = 1541
+	NoisePrivateKeySize   = 5223
 	NoisePresharedKeySize = 32
 )
 

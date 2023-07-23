@@ -9,7 +9,6 @@ import (
 	"crypto/hmac"
 	"hash"
 
-	"github.com/cloudflare/circl/kem/kyber/kyber512"
 	"golang.org/x/crypto/blake2s"
 )
 
@@ -86,20 +85,30 @@ func setZero(arr []byte) {
 // }
 
 // KEM: Pack sk's pub key
-func (sk *NoisePrivateKey) publicKey() (pk NoisePublicKey) {
-	// apk := (*[NoisePublicKeySize]byte)(&pk)
-	// ask := (*[NoisePrivateKeySize]byte)(sk)
-	// curve25519.ScalarBaseMult(apk, ask)
-	priv, err := kyber512.Scheme().UnmarshalBinaryPrivateKey((*sk)[:])
-	if err != nil {
-		return NoisePublicKey{}
-	}
-	buf, err := priv.Public().MarshalBinary()
-	if err != nil {
-		return NoisePublicKey{}
-	}
-	return NoisePublicKey(buf)
-}
+// func (sk *NoisePrivateKey) publicKey() (pk NoisePublicKey) {
+// 	kemName := "BIKE-L1"
+// 	kem := oqs.KeyEncapsulation{}
+// 	defer kem.Clean() // clean up even in case of panic
+// 	if err := kem.Init(kemName, nil); err != nil {
+// 		log.Fatal(err)
+// 	}
+// 	PublicKey, err := kem.GenerateKeyPair()
+// 	if err != nil {
+// 		log.Fatal(err)
+// 	}
+// 	SecretKey := kem.ExportSecretKey()
+// 	fmt.Println(kem.Details())
+
+// 	// priv, err := kyber512.Scheme().UnmarshalBinaryPrivateKey((*sk)[:])
+// 	// if err != nil {
+// 	// 	return NoisePublicKey{}
+// 	// }
+// 	// buf, err := priv.Public().MarshalBinary()
+// 	// if err != nil {
+// 	// 	return NoisePublicKey{}
+// 	// }
+// 	return NoisePublicKey(buf)
+// }
 
 // var errInvalidPublicKey = errors.New("invalid public key")
 
