@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cloudflare/circl/kem/kyber/kyber512"
+	"github.com/cloudflare/circl/kem/ntruprime/ntrulpr653"
 	"golang.org/x/crypto/blake2s"
 	"golang.org/x/crypto/chacha20poly1305"
 
@@ -62,13 +62,13 @@ const (
 )
 
 const (
-	MessageInitiationSize      = 2*4 + kyber512.PublicKeySize + chacha20poly1305.Overhead + kyber512.CiphertextSize + blake2s.Size + chacha20poly1305.Overhead + tai64n.TimestampSize + chacha20poly1305.Overhead + 2*blake2s.Size128 // size of handshake initiation message
-	MessageResponseSize        = 3*4 + 2*kyber512.CiphertextSize + chacha20poly1305.Overhead + 2*blake2s.Size128                                                                                                                      // size of response message
-	MessageCookieReplySize     = 64                                                                                                                                                                                                   // size of cookie reply message
-	MessageTransportHeaderSize = 16                                                                                                                                                                                                   // size of data preceding content in transport message
-	MessageTransportSize       = MessageTransportHeaderSize + chacha20poly1305.Overhead                                                                                                                                               // size of empty transport
-	MessageKeepaliveSize       = MessageTransportSize                                                                                                                                                                                 // size of keepalive
-	MessageHandshakeSize       = MessageInitiationSize                                                                                                                                                                                // size of largest handshake related message
+	MessageInitiationSize      = 2*4 + ntrulpr653.PublicKeySize + chacha20poly1305.Overhead + ntrulpr653.CiphertextSize + blake2s.Size + chacha20poly1305.Overhead + tai64n.TimestampSize + chacha20poly1305.Overhead + 2*blake2s.Size128 // size of handshake initiation message
+	MessageResponseSize        = 3*4 + 2*ntrulpr653.CiphertextSize + chacha20poly1305.Overhead + 2*blake2s.Size128                                                                                                                        // size of response message
+	MessageCookieReplySize     = 64                                                                                                                                                                                                       // size of cookie reply message
+	MessageTransportHeaderSize = 16                                                                                                                                                                                                       // size of data preceding content in transport message
+	MessageTransportSize       = MessageTransportHeaderSize + chacha20poly1305.Overhead                                                                                                                                                   // size of empty transport
+	MessageKeepaliveSize       = MessageTransportSize                                                                                                                                                                                     // size of keepalive
+	MessageHandshakeSize       = MessageInitiationSize                                                                                                                                                                                    // size of largest handshake related message
 )
 
 const (
@@ -87,7 +87,7 @@ type MessageInitiation struct {
 	Type        uint32
 	Sender      uint32
 	Ephemeral   [NoisePublicKeySize + chacha20poly1305.Overhead]byte
-	CipherTextS [kyber512.CiphertextSize]byte //Server Static Encapsulation
+	CipherTextS [ntrulpr653.CiphertextSize]byte //Server Static Encapsulation
 	Static      [blake2s.Size + chacha20poly1305.Overhead]byte
 	Timestamp   [tai64n.TimestampSize + chacha20poly1305.Overhead]byte
 	MAC1        [blake2s.Size128]byte
@@ -98,8 +98,8 @@ type MessageResponse struct {
 	Type        uint32
 	Sender      uint32
 	Receiver    uint32
-	CipherTextE [kyber512.CiphertextSize]byte                             //Client Ephemeral Encapsulation
-	CipherTextC [kyber512.CiphertextSize + chacha20poly1305.Overhead]byte //Client Static Encapsulation
+	CipherTextE [ntrulpr653.CiphertextSize]byte                             //Client Ephemeral Encapsulation
+	CipherTextC [ntrulpr653.CiphertextSize + chacha20poly1305.Overhead]byte //Client Static Encapsulation
 	MAC1        [blake2s.Size128]byte
 	MAC2        [blake2s.Size128]byte
 	// Ephemeral NoisePublicKey
@@ -202,7 +202,7 @@ func (device *Device) CreateMessageInitiation(peer *Peer) (*MessageInitiation, e
 	handshake.hash = InitialHash
 	handshake.chainKey = InitialChainKey
 	// handshake.localEphemeral, err = newPrivateKey()
-	pkE, skE, err := kyber512.Scheme().GenerateKeyPair()
+	pkE, skE, err := ntrulpr653.Scheme().GenerateKeyPair()
 	if err != nil {
 		return nil, err
 	}
@@ -218,12 +218,12 @@ func (device *Device) CreateMessageInitiation(peer *Peer) (*MessageInitiation, e
 	handshake.mixHash(handshake.remoteStatic[:])
 
 	//Encapsulation
-	pkR, err := kyber512.Scheme().UnmarshalBinaryPublicKey(handshake.remoteStatic[:])
+	pkR, err := ntrulpr653.Scheme().UnmarshalBinaryPublicKey(handshake.remoteStatic[:])
 	if err != nil {
 		return nil, err
 	}
 
-	ctR, ssR, err := kyber512.Scheme().Encapsulate(pkR)
+	ctR, ssR, err := pkR.Scheme().Encapsulate(pkR)
 	if err != nil {
 		return nil, err
 	}
@@ -232,7 +232,7 @@ func (device *Device) CreateMessageInitiation(peer *Peer) (*MessageInitiation, e
 
 	msg := MessageInitiation{
 		Type:        MessageInitiationType,
-		CipherTextS: [768]byte(ctR),
+		CipherTextS: [ntrulpr653.CiphertextSize]byte(ctR),
 	}
 
 	// ae, err := chacha20poly1305.New(ss[:])
@@ -301,11 +301,11 @@ func (device *Device) ConsumeMessageInitiation(msg *MessageInitiation) *Peer {
 	var hpeerPK [blake2s.Size]byte
 	var key [chacha20poly1305.KeySize]byte
 	var pkCE NoisePublicKey
-	skSm, err := kyber512.Scheme().UnmarshalBinaryPrivateKey(device.staticIdentity.privateKey[:])
+	skSm, err := ntrulpr653.Scheme().UnmarshalBinaryPrivateKey(device.staticIdentity.privateKey[:])
 	if err != nil {
 		return nil
 	}
-	ssS, err := kyber512.Scheme().Decapsulate(skSm, msg.CipherTextS[:])
+	ssS, err := ntrulpr653.Scheme().Decapsulate(skSm, msg.CipherTextS[:])
 	if err != nil {
 		return nil
 	}
@@ -422,22 +422,22 @@ func (device *Device) CreateMessageResponse(peer *Peer) (*MessageResponse, error
 	msg.Receiver = handshake.remoteIndex
 
 	// create ephemeral key
-	pkEm, err := kyber512.Scheme().UnmarshalBinaryPublicKey(handshake.remoteEphemeral[:])
+	pkEm, err := ntrulpr653.Scheme().UnmarshalBinaryPublicKey(handshake.remoteEphemeral[:])
 	if err != nil {
 		return nil, err
 	}
-	ctE, ssE, err := kyber512.Scheme().Encapsulate(pkEm)
+	ctE, ssE, err := pkEm.Scheme().Encapsulate(pkEm)
 	// handshake.localEphemeral, err = newPrivateKey()
 	if err != nil {
 		return nil, err
 	}
-	msg.CipherTextE = [kyber512.CiphertextSize]byte(ctE)
+	msg.CipherTextE = [ntrulpr653.CiphertextSize]byte(ctE)
 
-	pkCm, err := kyber512.Scheme().UnmarshalBinaryPublicKey(handshake.remoteStatic[:])
+	pkCm, err := ntrulpr653.Scheme().UnmarshalBinaryPublicKey(handshake.remoteStatic[:])
 	if err != nil {
 		return nil, err
 	}
-	ctC, ssC, err := kyber512.Scheme().Encapsulate(pkCm)
+	ctC, ssC, err := ntrulpr653.Scheme().Encapsulate(pkCm)
 	if err != nil {
 		return nil, err
 	}
@@ -518,11 +518,11 @@ func (device *Device) ConsumeMessageResponse(msg *MessageResponse) *Peer {
 		defer device.staticIdentity.RUnlock()
 
 		// finish 3-way DH
-		skEm, err := kyber512.Scheme().UnmarshalBinaryPrivateKey(handshake.localEphemeral[:])
+		skEm, err := ntrulpr653.Scheme().UnmarshalBinaryPrivateKey(handshake.localEphemeral[:])
 		if err != nil {
 			return false
 		}
-		ssE, err := kyber512.Scheme().Decapsulate(skEm, msg.CipherTextE[:])
+		ssE, err := skEm.Scheme().Decapsulate(skEm, msg.CipherTextE[:])
 		if err != nil {
 			return false
 		}
@@ -549,7 +549,7 @@ func (device *Device) ConsumeMessageResponse(msg *MessageResponse) *Peer {
 
 		var tau [blake2s.Size]byte
 		var key [chacha20poly1305.KeySize]byte
-		var ctC [kyber512.CiphertextSize]byte
+		var ctC [ntrulpr653.CiphertextSize]byte
 		KDF3(
 			&chainKey,
 			&tau,
@@ -567,11 +567,11 @@ func (device *Device) ConsumeMessageResponse(msg *MessageResponse) *Peer {
 			println("CipherTextC AEAD not ok")
 			return false
 		}
-		skCm, err := kyber512.Scheme().UnmarshalBinaryPrivateKey(device.staticIdentity.privateKey[:])
+		skCm, err := ntrulpr653.Scheme().UnmarshalBinaryPrivateKey(device.staticIdentity.privateKey[:])
 		if err != nil {
 			return false
 		}
-		ssC, err := kyber512.Scheme().Decapsulate(skCm, ctC[:])
+		ssC, err := skCm.Scheme().Decapsulate(skCm, ctC[:])
 		if err != nil {
 			println("ssC Decap not ok")
 			return false

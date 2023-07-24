@@ -11,7 +11,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/cloudflare/circl/kem/kyber/kyber512"
+	"github.com/cloudflare/circl/kem/ntruprime/ntrulpr653"
 	"golang.zx2c4.com/wireguard/conn"
 	"golang.zx2c4.com/wireguard/tun/tuntest"
 )
@@ -23,7 +23,7 @@ func assertBNil(b *testing.B, err error) {
 }
 
 func randBDevice(b *testing.B) *Device {
-	_, sk, err := kyber512.Scheme().GenerateKeyPair()
+	_, sk, err := ntrulpr653.Scheme().GenerateKeyPair()
 	assertBNil(b, err)
 	skM, err := sk.MarshalBinary()
 	assertBNil(b, err)
@@ -178,20 +178,20 @@ func TestNoiseHanshakeSizes(t *testing.T) {
 }
 
 func TestKem(t *testing.T) {
-	_, sk1, err := kyber512.Scheme().GenerateKeyPair()
+	_, sk1, err := ntrulpr653.Scheme().GenerateKeyPair()
 	assertNil(t, err)
 
-	_, sk2, err := kyber512.Scheme().GenerateKeyPair()
+	_, sk2, err := ntrulpr653.Scheme().GenerateKeyPair()
 	assertNil(t, err)
 
 	pk1 := sk1.Public()
 	pk2 := sk2.Public()
 
-	ct1, ss1, err1 := kyber512.Scheme().Encapsulate(pk1)
-	ss1d, err2 := kyber512.Scheme().Decapsulate(sk1, ct1)
+	ct1, ss1, err1 := pk1.Scheme().Encapsulate(pk1)
+	ss1d, err2 := sk1.Scheme().Decapsulate(sk1, ct1)
 
-	ct2, ss2, err3 := kyber512.Scheme().Encapsulate(pk2)
-	ss2d, err4 := kyber512.Scheme().Decapsulate(sk2, ct2)
+	ct2, ss2, err3 := pk2.Scheme().Encapsulate(pk2)
+	ss2d, err4 := sk2.Scheme().Decapsulate(sk2, ct2)
 
 	if !bytes.Equal(ss1, ss1d) || !bytes.Equal(ss2, ss2d) || err1 != nil || err2 != nil || err3 != nil || err4 != nil {
 		t.Fatal("Failed to compute shared secet")
@@ -199,7 +199,7 @@ func TestKem(t *testing.T) {
 }
 
 func randDevice(t *testing.T) *Device {
-	_, sk, err := kyber512.Scheme().GenerateKeyPair()
+	_, sk, err := ntrulpr653.Scheme().GenerateKeyPair()
 	assertNil(t, err)
 
 	skM, err := sk.MarshalBinary()

@@ -21,7 +21,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cloudflare/circl/kem/kyber/kyber512"
+	"github.com/cloudflare/circl/kem/ntruprime/ntrulpr653"
 	"golang.zx2c4.com/wireguard/conn"
 	"golang.zx2c4.com/wireguard/conn/bindtest"
 	"golang.zx2c4.com/wireguard/tun"
@@ -53,11 +53,11 @@ func uapiCfg(cfg ...string) string {
 // genConfigs generates a pair of configs that connect to each other.
 // The configs use distinct, probably-usable ports.
 func genConfigs(tb testing.TB) (cfgs, endpointCfgs [2]string) {
-	pk1, sk1, err := kyber512.Scheme().GenerateKeyPair()
+	pk1, sk1, err := ntrulpr653.Scheme().GenerateKeyPair()
 	if err != nil {
 		tb.Errorf("unable to generate key pair 1: %v", err)
 	}
-	pk2, sk2, err := kyber512.Scheme().GenerateKeyPair()
+	pk2, sk2, err := ntrulpr653.Scheme().GenerateKeyPair()
 	if err != nil {
 		tb.Errorf("unable to generate key pair 2: %v", err)
 	}

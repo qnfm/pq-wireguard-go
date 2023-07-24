@@ -60,17 +60,6 @@ func (device *Device) IpcGetOperation(w io.Writer) error {
 		fmt.Fprintf(buf, format, args...)
 		buf.WriteByte('\n')
 	}
-	// keyf := func(prefix string, key *[kyber512.PrivateKeySize]byte) {
-	// 	buf.Grow(len(key)*2 + 2 + len(prefix))
-	// 	buf.WriteString(prefix)
-	// 	buf.WriteByte('=')
-	// 	const hex = "0123456789abcdef"
-	// 	for i := 0; i < len(key); i++ {
-	// 		buf.WriteByte(hex[key[i]>>4])
-	// 		buf.WriteByte(hex[key[i]&0xf])
-	// 	}
-	// 	buf.WriteByte('\n')
-	// }
 
 	func() {
 		// lock required resources
