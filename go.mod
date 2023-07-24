@@ -22,4 +22,4 @@ require (
 	golang.org/x/time v0.3.0 // indirect
 )
 
-replace github.com/cloudflare/circl => ../../../qnfm/circl/
+replace github.com/cloudflare/circl => ../circl/
