@@ -514,7 +514,7 @@ func (device *Device) ConsumeMessageResponse(msg *MessageResponse) *Peer {
 
 		kemE := oqs.KeyEncapsulation{}
 		defer kemE.Clean() // clean up even in case of panic
-		if err := kemE.Init(kem1Name, handshake.localEphemeral[:]); err != nil {
+		if err := kemE.Init(kem1Name, device.staticIdentity.privateKey[:]); err != nil {
 			log.Fatal(err)
 		}
 
@@ -566,7 +566,7 @@ func (device *Device) ConsumeMessageResponse(msg *MessageResponse) *Peer {
 
 		kemC := oqs.KeyEncapsulation{}
 		defer kemC.Clean() // clean up even in case of panic
-		if err := kemC.Init(kem1Name, handshake.localEphemeral[:]); err != nil {
+		if err := kemC.Init(kem1Name, device.staticIdentity.privateKey[:]); err != nil {
 			log.Fatal(err)
 		}
 

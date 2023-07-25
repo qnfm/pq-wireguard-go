@@ -11,11 +11,11 @@ import (
 )
 
 const (
-	NoisePublicKeySize    = 1541
-	NoisePrivateKeySize   = 5223
+	NoisePublicKeySize    = 2249
+	NoisePrivateKeySize   = 2289
 	NoisePresharedKeySize = 32
-	kem1Name              = "BIKE-L1"
-	kem1CTSize            = 1573
+	kem1Name              = "HQC-128"
+	kem1CTSize            = 4481
 )
 
 type (
