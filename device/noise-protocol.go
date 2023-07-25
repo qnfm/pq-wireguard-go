@@ -63,13 +63,13 @@ const (
 )
 
 const (
-	MessageInitiationSize      = 2*4 + mceliece348864f.PublicKeySize + chacha20poly1305.Overhead + mceliece348864f.CiphertextSize + blake2s.Size + chacha20poly1305.Overhead + tai64n.TimestampSize + chacha20poly1305.Overhead + 2*blake2s.Size128 // size of handshake initiation message
-	MessageResponseSize        = 3*4 + 2*mceliece348864f.CiphertextSize + chacha20poly1305.Overhead + 2*blake2s.Size128                                                                                                                             // size of response message
-	MessageCookieReplySize     = 64                                                                                                                                                                                                                 // size of cookie reply message
-	MessageTransportHeaderSize = 16                                                                                                                                                                                                                 // size of data preceding content in transport message
-	MessageTransportSize       = MessageTransportHeaderSize + chacha20poly1305.Overhead                                                                                                                                                             // size of empty transport
-	MessageKeepaliveSize       = MessageTransportSize                                                                                                                                                                                               // size of keepalive
-	MessageHandshakeSize       = MessageInitiationSize                                                                                                                                                                                              // size of largest handshake related message
+	MessageInitiationSize      = 2*4 + kyber512.PublicKeySize + chacha20poly1305.Overhead + mceliece348864f.CiphertextSize + blake2s.Size + chacha20poly1305.Overhead + tai64n.TimestampSize + chacha20poly1305.Overhead + 2*blake2s.Size128 // size of handshake initiation message
+	MessageResponseSize        = 3*4 + 2*mceliece348864f.CiphertextSize + chacha20poly1305.Overhead + 2*blake2s.Size128                                                                                                                      // size of response message
+	MessageCookieReplySize     = 64                                                                                                                                                                                                          // size of cookie reply message
+	MessageTransportHeaderSize = 16                                                                                                                                                                                                          // size of data preceding content in transport message
+	MessageTransportSize       = MessageTransportHeaderSize + chacha20poly1305.Overhead                                                                                                                                                      // size of empty transport
+	MessageKeepaliveSize       = MessageTransportSize                                                                                                                                                                                        // size of keepalive
+	MessageHandshakeSize       = MessageInitiationSize                                                                                                                                                                                       // size of largest handshake related message
 )
 
 const (
