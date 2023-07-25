@@ -255,7 +255,7 @@ func TestNoiseHandshake(t *testing.T) {
 	msg1, err := dev1.CreateMessageInitiation(peer2)
 	assertNil(t, err)
 
-	packet := make([]byte, 0, 2048)
+	packet := make([]byte, 0, MessageInitiationSize)
 	writer := bytes.NewBuffer(packet)
 	err = binary.Write(writer, binary.LittleEndian, msg1)
 	assertNil(t, err)

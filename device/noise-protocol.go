@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cloudflare/circl/kem/kyber/kyber512"
 	"github.com/cloudflare/circl/kem/mceliece/mceliece348864f"
 	"golang.org/x/crypto/blake2s"
 	"golang.org/x/crypto/chacha20poly1305"
@@ -86,7 +87,7 @@ const (
 type MessageInitiation struct {
 	Type        uint32
 	Sender      uint32
-	Ephemeral   [NoisePublicKeySize + chacha20poly1305.Overhead]byte
+	Ephemeral   [kyber512.PublicKeySize + chacha20poly1305.Overhead]byte
 	CipherTextS [mceliece348864f.CiphertextSize]byte //Server Static Encapsulation
 	Static      [blake2s.Size + chacha20poly1305.Overhead]byte
 	Timestamp   [tai64n.TimestampSize + chacha20poly1305.Overhead]byte
@@ -98,7 +99,7 @@ type MessageResponse struct {
 	Type        uint32
 	Sender      uint32
 	Receiver    uint32
-	CipherTextE [mceliece348864f.CiphertextSize]byte                             //Client Ephemeral Encapsulation
+	CipherTextE [kyber512.CiphertextSize]byte                                    //Client Ephemeral Encapsulation
 	CipherTextC [mceliece348864f.CiphertextSize + chacha20poly1305.Overhead]byte //Client Static Encapsulation
 	MAC1        [blake2s.Size128]byte
 	MAC2        [blake2s.Size128]byte
@@ -126,11 +127,11 @@ type Handshake struct {
 	hash                      [blake2s.Size]byte // hash value
 	chainKey                  [blake2s.Size]byte // chain key
 	presharedKey              NoisePresharedKey  // H(pkSC[:16]^pkSS[:16])
-	localEphemeral            NoisePrivateKey    // ephemeral secret key
+	localEphemeral            NoiseEPrivateKey   // ephemeral secret key
 	localIndex                uint32             // used to clear hash-table
 	remoteIndex               uint32             // index for sending
 	remoteStatic              NoisePublicKey     // long term key
-	remoteEphemeral           NoisePublicKey     // ephemeral public key
+	remoteEphemeral           NoiseEPublicKey    // ephemeral public key
 	lastTimestamp             tai64n.Timestamp
 	lastInitiationConsumption time.Time
 	lastSentHandshake         time.Time
@@ -202,7 +203,7 @@ func (device *Device) CreateMessageInitiation(peer *Peer) (*MessageInitiation, e
 	handshake.hash = InitialHash
 	handshake.chainKey = InitialChainKey
 	// handshake.localEphemeral, err = newPrivateKey()
-	pkE, skE, err := mceliece348864f.Scheme().GenerateKeyPair()
+	pkE, skE, err := kyber512.Scheme().GenerateKeyPair()
 	if err != nil {
 		return nil, err
 	}
@@ -214,16 +215,16 @@ func (device *Device) CreateMessageInitiation(peer *Peer) (*MessageInitiation, e
 	if err != nil {
 		return nil, err
 	}
-	handshake.localEphemeral = NoisePrivateKey(skEm)
+	handshake.localEphemeral = NoiseEPrivateKey(skEm)
 	handshake.mixHash(handshake.remoteStatic[:])
 
 	//Encapsulation
-	pkR, err := pkE.Scheme().UnmarshalBinaryPublicKey(handshake.remoteStatic[:])
+	pkR, err := mceliece348864f.Scheme().UnmarshalBinaryPublicKey(handshake.remoteStatic[:])
 	if err != nil {
 		return nil, err
 	}
 
-	ctR, ssR, err := pkE.Scheme().Encapsulate(pkR)
+	ctR, ssR, err := pkR.Scheme().Encapsulate(pkR)
 	if err != nil {
 		return nil, err
 	}
@@ -300,7 +301,7 @@ func (device *Device) ConsumeMessageInitiation(msg *MessageInitiation) *Peer {
 	// decrypt the hash of static key
 	var hpeerPK [blake2s.Size]byte
 	var key [chacha20poly1305.KeySize]byte
-	var pkCE NoisePublicKey
+	var pkCE NoiseEPublicKey
 	skSm, err := mceliece348864f.Scheme().UnmarshalBinaryPrivateKey(device.staticIdentity.privateKey[:])
 	if err != nil {
 		return nil
@@ -422,7 +423,7 @@ func (device *Device) CreateMessageResponse(peer *Peer) (*MessageResponse, error
 	msg.Receiver = handshake.remoteIndex
 
 	// create ephemeral key
-	pkEm, err := mceliece348864f.Scheme().UnmarshalBinaryPublicKey(handshake.remoteEphemeral[:])
+	pkEm, err := kyber512.Scheme().UnmarshalBinaryPublicKey(handshake.remoteEphemeral[:])
 	if err != nil {
 		return nil, err
 	}
@@ -431,7 +432,7 @@ func (device *Device) CreateMessageResponse(peer *Peer) (*MessageResponse, error
 	if err != nil {
 		return nil, err
 	}
-	msg.CipherTextE = [mceliece348864f.CiphertextSize]byte(ctE)
+	msg.CipherTextE = [kyber512.CiphertextSize]byte(ctE)
 
 	pkCm, err := mceliece348864f.Scheme().UnmarshalBinaryPublicKey(handshake.remoteStatic[:])
 	if err != nil {
@@ -518,7 +519,7 @@ func (device *Device) ConsumeMessageResponse(msg *MessageResponse) *Peer {
 		defer device.staticIdentity.RUnlock()
 
 		// finish 3-way DH
-		skEm, err := mceliece348864f.Scheme().UnmarshalBinaryPrivateKey(handshake.localEphemeral[:])
+		skEm, err := kyber512.Scheme().UnmarshalBinaryPrivateKey(handshake.localEphemeral[:])
 		if err != nil {
 			return false
 		}
