@@ -86,10 +86,10 @@ func setZero(arr []byte) {
 
 // KEM: Pack sk's pub key
 // func (sk *NoisePrivateKey) publicKey() (pk NoisePublicKey) {
-// 	kemName := "BIKE-L1"
+//
 // 	kem := oqs.KeyEncapsulation{}
 // 	defer kem.Clean() // clean up even in case of panic
-// 	if err := kem.Init(kemName, nil); err != nil {
+// 	if err := kem.Init(kem1Name, nil); err != nil {
 // 		log.Fatal(err)
 // 	}
 // 	PublicKey, err := kem.GenerateKeyPair()

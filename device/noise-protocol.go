@@ -63,13 +63,13 @@ const (
 )
 
 const (
-	MessageInitiationSize      = 2*4 + 1541 + chacha20poly1305.Overhead + 1573 + blake2s.Size + chacha20poly1305.Overhead + tai64n.TimestampSize + chacha20poly1305.Overhead + 2*blake2s.Size128 // size of handshake initiation message
-	MessageResponseSize        = 3*4 + 2*1573 + chacha20poly1305.Overhead + 2*blake2s.Size128                                                                                                    // size of response message
-	MessageCookieReplySize     = 64                                                                                                                                                              // size of cookie reply message
-	MessageTransportHeaderSize = 16                                                                                                                                                              // size of data preceding content in transport message
-	MessageTransportSize       = MessageTransportHeaderSize + chacha20poly1305.Overhead                                                                                                          // size of empty transport
-	MessageKeepaliveSize       = MessageTransportSize                                                                                                                                            // size of keepalive
-	MessageHandshakeSize       = MessageInitiationSize                                                                                                                                           // size of largest handshake related message
+	MessageInitiationSize      = 2*4 + NoisePublicKeySize + chacha20poly1305.Overhead + kem1CTSize + blake2s.Size + chacha20poly1305.Overhead + tai64n.TimestampSize + chacha20poly1305.Overhead + 2*blake2s.Size128 // size of handshake initiation message
+	MessageResponseSize        = 3*4 + 2*kem1CTSize + chacha20poly1305.Overhead + 2*blake2s.Size128                                                                                                                  // size of response message
+	MessageCookieReplySize     = 64                                                                                                                                                                                  // size of cookie reply message
+	MessageTransportHeaderSize = 16                                                                                                                                                                                  // size of data preceding content in transport message
+	MessageTransportSize       = MessageTransportHeaderSize + chacha20poly1305.Overhead                                                                                                                              // size of empty transport
+	MessageKeepaliveSize       = MessageTransportSize                                                                                                                                                                // size of keepalive
+	MessageHandshakeSize       = MessageInitiationSize                                                                                                                                                               // size of largest handshake related message
 )
 
 const (
@@ -88,7 +88,7 @@ type MessageInitiation struct {
 	Type        uint32
 	Sender      uint32
 	Ephemeral   [NoisePublicKeySize + chacha20poly1305.Overhead]byte
-	CipherTextS [1573]byte //Server Static Encapsulation
+	CipherTextS [kem1CTSize]byte //Server Static Encapsulation
 	Static      [blake2s.Size + chacha20poly1305.Overhead]byte
 	Timestamp   [tai64n.TimestampSize + chacha20poly1305.Overhead]byte
 	MAC1        [blake2s.Size128]byte
@@ -99,8 +99,8 @@ type MessageResponse struct {
 	Type        uint32
 	Sender      uint32
 	Receiver    uint32
-	CipherTextE [1573]byte                             //Client Ephemeral Encapsulation
-	CipherTextC [1573 + chacha20poly1305.Overhead]byte //Client Static Encapsulation
+	CipherTextE [kem1CTSize]byte                             //Client Ephemeral Encapsulation
+	CipherTextC [kem1CTSize + chacha20poly1305.Overhead]byte //Client Static Encapsulation
 	MAC1        [blake2s.Size128]byte
 	MAC2        [blake2s.Size128]byte
 	// Ephemeral NoisePublicKey
@@ -204,10 +204,9 @@ func (device *Device) CreateMessageInitiation(peer *Peer) (*MessageInitiation, e
 	handshake.chainKey = InitialChainKey
 	// handshake.localEphemeral, err = newPrivateKey()
 
-	kemName := "BIKE-L1"
 	kem := oqs.KeyEncapsulation{}
 	defer kem.Clean() // clean up even in case of panic
-	if err := kem.Init(kemName, nil); err != nil {
+	if err := kem.Init(kem1Name, nil); err != nil {
 		log.Fatal(err)
 	}
 	pkE, err := kem.GenerateKeyPair()
@@ -228,7 +227,7 @@ func (device *Device) CreateMessageInitiation(peer *Peer) (*MessageInitiation, e
 
 	msg := MessageInitiation{
 		Type:        MessageInitiationType,
-		CipherTextS: [1573]byte(ctS),
+		CipherTextS: [kem1CTSize]byte(ctS),
 	}
 
 	// ae, err := chacha20poly1305.New(ss[:])
@@ -298,10 +297,9 @@ func (device *Device) ConsumeMessageInitiation(msg *MessageInitiation) *Peer {
 	var key [chacha20poly1305.KeySize]byte
 	var pkCE NoisePublicKey
 
-	kemName := "BIKE-L1"
 	kem := oqs.KeyEncapsulation{}
 	defer kem.Clean() // clean up even in case of panic
-	if err := kem.Init(kemName, device.staticIdentity.privateKey[:]); err != nil {
+	if err := kem.Init(kem1Name, device.staticIdentity.privateKey[:]); err != nil {
 		log.Fatal(err)
 	}
 	//Decapsulation
@@ -418,10 +416,10 @@ func (device *Device) CreateMessageResponse(peer *Peer) (*MessageResponse, error
 	msg.Receiver = handshake.remoteIndex
 
 	// create ephemeral key
-	kemName := "BIKE-L1"
+
 	kem := oqs.KeyEncapsulation{}
 	defer kem.Clean() // clean up even in case of panic
-	if err := kem.Init(kemName, device.staticIdentity.privateKey[:]); err != nil {
+	if err := kem.Init(kem1Name, device.staticIdentity.privateKey[:]); err != nil {
 		log.Fatal(err)
 	}
 
@@ -430,7 +428,7 @@ func (device *Device) CreateMessageResponse(peer *Peer) (*MessageResponse, error
 	if err != nil {
 		return nil, err
 	}
-	msg.CipherTextE = [1573]byte(ctE)
+	msg.CipherTextE = [kem1CTSize]byte(ctE)
 
 	ctC, ssC, err := kem.EncapSecret(handshake.remoteStatic[:])
 	if err != nil {
@@ -513,10 +511,10 @@ func (device *Device) ConsumeMessageResponse(msg *MessageResponse) *Peer {
 		defer device.staticIdentity.RUnlock()
 
 		// finish 3-way DH
-		kemName := "BIKE-L1"
+
 		kemE := oqs.KeyEncapsulation{}
 		defer kemE.Clean() // clean up even in case of panic
-		if err := kemE.Init(kemName, handshake.localEphemeral[:]); err != nil {
+		if err := kemE.Init(kem1Name, handshake.localEphemeral[:]); err != nil {
 			log.Fatal(err)
 		}
 
@@ -547,7 +545,7 @@ func (device *Device) ConsumeMessageResponse(msg *MessageResponse) *Peer {
 
 		var tau [blake2s.Size]byte
 		var key [chacha20poly1305.KeySize]byte
-		var ctC [1573]byte
+		var ctC [kem1CTSize]byte
 		KDF3(
 			&chainKey,
 			&tau,
@@ -568,7 +566,7 @@ func (device *Device) ConsumeMessageResponse(msg *MessageResponse) *Peer {
 
 		kemC := oqs.KeyEncapsulation{}
 		defer kemC.Clean() // clean up even in case of panic
-		if err := kemC.Init(kemName, handshake.localEphemeral[:]); err != nil {
+		if err := kemC.Init(kem1Name, handshake.localEphemeral[:]); err != nil {
 			log.Fatal(err)
 		}
 

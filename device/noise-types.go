@@ -14,6 +14,8 @@ const (
 	NoisePublicKeySize    = 1541
 	NoisePrivateKeySize   = 5223
 	NoisePresharedKeySize = 32
+	kem1Name              = "BIKE-L1"
+	kem1CTSize            = 1573
 )
 
 type (

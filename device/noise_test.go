@@ -23,10 +23,10 @@ func assertBNil(b *testing.B, err error) {
 }
 
 func randBDevice(b *testing.B) *Device {
-	kemName := "BIKE-L1"
+
 	kem := oqs.KeyEncapsulation{}
 	defer kem.Clean() // clean up even in case of panic
-	assertBNil(b, kem.Init(kemName, nil))
+	assertBNil(b, kem.Init(kem1Name, nil))
 
 	pk, err := kem.GenerateKeyPair()
 	assertBNil(b, err)
@@ -183,10 +183,10 @@ func TestNoiseHanshakeSizes(t *testing.T) {
 }
 
 func TestKem(t *testing.T) {
-	kemName := "BIKE-L1"
+
 	kem1 := oqs.KeyEncapsulation{}
 	defer kem1.Clean() // clean up even in case of panic
-	assertNil(t, kem1.Init(kemName, nil))
+	assertNil(t, kem1.Init(kem1Name, nil))
 
 	pk1, err := kem1.GenerateKeyPair()
 	assertNil(t, err)
@@ -195,7 +195,7 @@ func TestKem(t *testing.T) {
 
 	kem2 := oqs.KeyEncapsulation{}
 	defer kem2.Clean() // clean up even in case of panic
-	assertNil(t, kem2.Init(kemName, nil))
+	assertNil(t, kem2.Init(kem1Name, nil))
 
 	pk2, err := kem2.GenerateKeyPair()
 	assertNil(t, err)
@@ -214,10 +214,10 @@ func TestKem(t *testing.T) {
 }
 
 func randDevice(t *testing.T) *Device {
-	kemName := "BIKE-L1"
+
 	kem := oqs.KeyEncapsulation{}
 	defer kem.Clean() // clean up even in case of panic
-	assertNil(t, kem.Init(kemName, nil))
+	assertNil(t, kem.Init(kem1Name, nil))
 
 	pk, err := kem.GenerateKeyPair()
 	assertNil(t, err)

@@ -557,10 +557,10 @@ func (device *Device) PrintDevice() {
 }
 
 func GenerateDeviceKeys() ([]byte, []byte) {
-	kemName := "BIKE-L1"
+
 	kem := oqs.KeyEncapsulation{}
 	defer kem.Clean() // clean up even in case of panic
-	if err := kem.Init(kemName, nil); err != nil {
+	if err := kem.Init(kem1Name, nil); err != nil {
 		return nil, nil
 	}
 	pk, err := kem.GenerateKeyPair()

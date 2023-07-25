@@ -53,10 +53,10 @@ func uapiCfg(cfg ...string) string {
 // genConfigs generates a pair of configs that connect to each other.
 // The configs use distinct, probably-usable ports.
 func genConfigs(tb testing.TB) (cfgs, endpointCfgs [2]string) {
-	kemName := "BIKE-L1"
+
 	kem1 := oqs.KeyEncapsulation{}
 	defer kem1.Clean() // clean up even in case of panic
-	if err := kem1.Init(kemName, nil); err != nil {
+	if err := kem1.Init(kem1Name, nil); err != nil {
 		tb.Fatal(err)
 	}
 	pk1, err := kem1.GenerateKeyPair()
@@ -65,7 +65,7 @@ func genConfigs(tb testing.TB) (cfgs, endpointCfgs [2]string) {
 	}
 	kem2 := oqs.KeyEncapsulation{}
 	defer kem2.Clean() // clean up even in case of panic
-	if err := kem2.Init(kemName, nil); err != nil {
+	if err := kem2.Init(kem1Name, nil); err != nil {
 		tb.Fatal(err)
 	}
 	pk2, err := kem2.GenerateKeyPair()
