@@ -55,6 +55,136 @@ func assertEqual(t *testing.T, a, b []byte) {
 		t.Fatal(a, "!=", b)
 	}
 }
+func randBDevice(b *testing.B) *Device {
+	sk, err := newPrivateKey()
+	if err != nil {
+		b.Fatal(err)
+	}
+	tun := tuntest.NewChannelTUN()
+	logger := NewLogger(LogLevelError, "")
+	device := NewDevice(tun.TUN(), conn.NewDefaultBind(), logger)
+	device.SetPrivateKey(sk)
+	return device
+}
+
+func BenchmarkHandshakeServer(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		b.StopTimer()
+		dev1 := randBDevice(b)
+		dev2 := randBDevice(b)
+		peer1, _ := dev2.NewPeer(dev1.staticIdentity.publicKey)
+		peer2, _ := dev1.NewPeer(dev2.staticIdentity.publicKey)
+		peer1.Start()
+		peer2.Start()
+		msg1, _ := dev1.CreateMessageInitiation(peer2)
+		packet := make([]byte, 0, 256)
+		writer := bytes.NewBuffer(packet)
+		binary.Write(writer, binary.LittleEndian, msg1)
+
+		b.StartTimer()
+		dev2.ConsumeMessageInitiation(msg1)
+		dev2.CreateMessageResponse(peer1)
+		b.StopTimer()
+
+		dev1.Close()
+		dev2.Close()
+		b.StartTimer()
+	}
+}
+
+func BenchmarkHandshakeClient(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		b.StopTimer()
+		dev1 := randBDevice(b)
+		dev2 := randBDevice(b)
+		peer1, _ := dev2.NewPeer(dev1.staticIdentity.publicKey)
+		peer2, _ := dev1.NewPeer(dev2.staticIdentity.publicKey)
+		peer1.Start()
+		peer2.Start()
+		b.StartTimer()
+		msg1, _ := dev1.CreateMessageInitiation(peer2)
+		b.StopTimer()
+		packet := make([]byte, 0, 256)
+		writer := bytes.NewBuffer(packet)
+		binary.Write(writer, binary.LittleEndian, msg1)
+
+		dev2.ConsumeMessageInitiation(msg1)
+		msg2, _ := dev2.CreateMessageResponse(peer1)
+
+		b.StartTimer()
+		dev1.ConsumeMessageResponse(msg2)
+
+		b.StopTimer()
+		dev1.Close()
+		dev2.Close()
+		b.StartTimer()
+	}
+}
+
+func BenchmarkHandshake(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+
+		//ignore errors everywhere
+		dev1 := randBDevice(b)
+		dev2 := randBDevice(b)
+
+		peer1, _ := dev2.NewPeer(dev1.staticIdentity.publicKey)
+		peer2, _ := dev1.NewPeer(dev2.staticIdentity.publicKey)
+		peer1.Start()
+		peer2.Start()
+		/* simulate handshake */
+
+		// initiation message
+
+		msg1, _ := dev1.CreateMessageInitiation(peer2)
+
+		packet := make([]byte, 0, 256)
+		writer := bytes.NewBuffer(packet)
+		binary.Write(writer, binary.LittleEndian, msg1)
+		dev2.ConsumeMessageInitiation(msg1)
+
+		// response message
+
+		msg2, _ := dev2.CreateMessageResponse(peer1)
+
+		dev1.ConsumeMessageResponse(msg2)
+
+		// key pairs
+
+		peer1.BeginSymmetricSession()
+
+		peer2.BeginSymmetricSession()
+
+		/** can't code test but manualy tested and ok
+		assertEqual(
+			t,
+			peer1.keypairs.next.send,
+			peer2.keypairs.Current().receive)**/
+
+		key1 := peer1.keypairs.next.Load()
+		key2 := peer2.keypairs.current
+
+		// encrypting / decryption test
+
+		func() {
+			testMsg := []byte("wireguard test message 1")
+			var out []byte
+			var nonce [12]byte
+			out = key1.send.Seal(out, nonce[:], testMsg, nil)
+			key2.receive.Open(out[:0], nonce[:], out, nil)
+		}()
+
+		func() {
+			testMsg := []byte("wireguard test message 2")
+			var out []byte
+			var nonce [12]byte
+			out = key2.send.Seal(out, nonce[:], testMsg, nil)
+			key1.receive.Open(out[:0], nonce[:], out, nil)
+		}()
+		dev1.Close()
+		dev2.Close()
+	}
+}
 
 func TestNoiseHandshake(t *testing.T) {
 	dev1 := randDevice(t)
