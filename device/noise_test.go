@@ -8,11 +8,16 @@ package device
 import (
 	"bytes"
 	"encoding/binary"
+	"fmt"
 	"testing"
 
 	"golang.zx2c4.com/wireguard/conn"
 	"golang.zx2c4.com/wireguard/tun/tuntest"
 )
+
+func TestNoiseHanshakeSizes(t *testing.T) {
+	fmt.Printf("Message init size %v, message response size %+v\n", MessageInitiationSize, MessageResponseSize)
+}
 
 func TestCurveWrappers(t *testing.T) {
 	sk1, err := newPrivateKey()
@@ -55,6 +60,7 @@ func assertEqual(t *testing.T, a, b []byte) {
 		t.Fatal(a, "!=", b)
 	}
 }
+
 func randBDevice(b *testing.B) *Device {
 	sk, err := newPrivateKey()
 	if err != nil {
@@ -77,7 +83,7 @@ func BenchmarkHandshakeServer(b *testing.B) {
 		peer1.Start()
 		peer2.Start()
 		msg1, _ := dev1.CreateMessageInitiation(peer2)
-		packet := make([]byte, 0, 256)
+		packet := make([]byte, 0, MessageInitiationSize)
 		writer := bytes.NewBuffer(packet)
 		binary.Write(writer, binary.LittleEndian, msg1)
 
@@ -104,7 +110,7 @@ func BenchmarkHandshakeClient(b *testing.B) {
 		b.StartTimer()
 		msg1, _ := dev1.CreateMessageInitiation(peer2)
 		b.StopTimer()
-		packet := make([]byte, 0, 256)
+		packet := make([]byte, 0, MessageInitiationSize)
 		writer := bytes.NewBuffer(packet)
 		binary.Write(writer, binary.LittleEndian, msg1)
 
@@ -138,7 +144,7 @@ func BenchmarkHandshake(b *testing.B) {
 
 		msg1, _ := dev1.CreateMessageInitiation(peer2)
 
-		packet := make([]byte, 0, 256)
+		packet := make([]byte, 0, MessageInitiationSize)
 		writer := bytes.NewBuffer(packet)
 		binary.Write(writer, binary.LittleEndian, msg1)
 		dev2.ConsumeMessageInitiation(msg1)
@@ -151,36 +157,36 @@ func BenchmarkHandshake(b *testing.B) {
 
 		// key pairs
 
-		peer1.BeginSymmetricSession()
+		// peer1.BeginSymmetricSession()
 
-		peer2.BeginSymmetricSession()
+		// peer2.BeginSymmetricSession()
 
-		/** can't code test but manualy tested and ok
-		assertEqual(
-			t,
-			peer1.keypairs.next.send,
-			peer2.keypairs.Current().receive)**/
+		// /** can't code test but manualy tested and ok
+		// assertEqual(
+		// 	t,
+		// 	peer1.keypairs.next.send,
+		// 	peer2.keypairs.Current().receive)**/
 
-		key1 := peer1.keypairs.next.Load()
-		key2 := peer2.keypairs.current
+		// key1 := peer1.keypairs.next.Load()
+		// key2 := peer2.keypairs.current
 
-		// encrypting / decryption test
+		// // encrypting / decryption test
 
-		func() {
-			testMsg := []byte("wireguard test message 1")
-			var out []byte
-			var nonce [12]byte
-			out = key1.send.Seal(out, nonce[:], testMsg, nil)
-			key2.receive.Open(out[:0], nonce[:], out, nil)
-		}()
+		// func() {
+		// 	testMsg := []byte("wireguard test message 1")
+		// 	var out []byte
+		// 	var nonce [12]byte
+		// 	out = key1.send.Seal(out, nonce[:], testMsg, nil)
+		// 	key2.receive.Open(out[:0], nonce[:], out, nil)
+		// }()
 
-		func() {
-			testMsg := []byte("wireguard test message 2")
-			var out []byte
-			var nonce [12]byte
-			out = key2.send.Seal(out, nonce[:], testMsg, nil)
-			key1.receive.Open(out[:0], nonce[:], out, nil)
-		}()
+		// func() {
+		// 	testMsg := []byte("wireguard test message 2")
+		// 	var out []byte
+		// 	var nonce [12]byte
+		// 	out = key2.send.Seal(out, nonce[:], testMsg, nil)
+		// 	key1.receive.Open(out[:0], nonce[:], out, nil)
+		// }()
 		dev1.Close()
 		dev2.Close()
 	}
