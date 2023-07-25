@@ -16,6 +16,7 @@ const (
 	NoisePublicKeySize    = sntrup653.PublicKeySize
 	NoisePrivateKeySize   = sntrup653.PrivateKeySize
 	NoisePresharedKeySize = 32
+	kem1Name              = "sntrup653"
 )
 
 type (
