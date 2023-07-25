@@ -9,12 +9,12 @@ import (
 	"crypto/subtle"
 	"encoding/base64"
 
-	"github.com/cloudflare/circl/kem/ntruprime/ntrulpr653"
+	"github.com/cloudflare/circl/kem/ntruprime/sntrup653"
 )
 
 const (
-	NoisePublicKeySize    = ntrulpr653.PublicKeySize
-	NoisePrivateKeySize   = ntrulpr653.PrivateKeySize
+	NoisePublicKeySize    = sntrup653.PublicKeySize
+	NoisePrivateKeySize   = sntrup653.PrivateKeySize
 	NoisePresharedKeySize = 32
 )
 

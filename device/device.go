@@ -13,7 +13,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/cloudflare/circl/kem/ntruprime/ntrulpr653"
+	"github.com/cloudflare/circl/kem/ntruprime/sntrup653"
 	"github.com/lukechampine/fastxor"
 	"golang.org/x/crypto/blake2s"
 	"golang.zx2c4.com/wireguard/conn"
@@ -558,7 +558,7 @@ func (device *Device) PrintDevice() {
 }
 
 func GenerateDeviceKeys() ([]byte, []byte) {
-	pk, sk, err := ntrulpr653.Scheme().GenerateKeyPair()
+	pk, sk, err := sntrup653.Scheme().GenerateKeyPair()
 	if err != nil {
 		return nil, nil
 	}

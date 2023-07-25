@@ -8,7 +8,7 @@ package device
 import (
 	"testing"
 
-	"github.com/cloudflare/circl/kem/ntruprime/ntrulpr653"
+	"github.com/cloudflare/circl/kem/ntruprime/sntrup653"
 )
 
 func TestCookieMAC1(t *testing.T) {
@@ -19,7 +19,7 @@ func TestCookieMAC1(t *testing.T) {
 		checker   CookieChecker
 	)
 
-	_, sk, err := ntrulpr653.Scheme().GenerateKeyPair()
+	_, sk, err := sntrup653.Scheme().GenerateKeyPair()
 	if err != nil {
 		t.Fatal(err)
 	}

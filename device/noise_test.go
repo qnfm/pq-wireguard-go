@@ -11,7 +11,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/cloudflare/circl/kem/ntruprime/ntrulpr653"
+	"github.com/cloudflare/circl/kem/ntruprime/sntrup653"
 	"golang.zx2c4.com/wireguard/conn"
 	"golang.zx2c4.com/wireguard/tun/tuntest"
 )
@@ -23,7 +23,7 @@ func assertBNil(b *testing.B, err error) {
 }
 
 func randBDevice(b *testing.B) *Device {
-	_, sk, err := ntrulpr653.Scheme().GenerateKeyPair()
+	_, sk, err := sntrup653.Scheme().GenerateKeyPair()
 	assertBNil(b, err)
 	skM, err := sk.MarshalBinary()
 	assertBNil(b, err)
@@ -178,10 +178,10 @@ func TestNoiseHanshakeSizes(t *testing.T) {
 }
 
 func TestKem(t *testing.T) {
-	_, sk1, err := ntrulpr653.Scheme().GenerateKeyPair()
+	_, sk1, err := sntrup653.Scheme().GenerateKeyPair()
 	assertNil(t, err)
 
-	_, sk2, err := ntrulpr653.Scheme().GenerateKeyPair()
+	_, sk2, err := sntrup653.Scheme().GenerateKeyPair()
 	assertNil(t, err)
 
 	pk1 := sk1.Public()
@@ -199,7 +199,7 @@ func TestKem(t *testing.T) {
 }
 
 func randDevice(t *testing.T) *Device {
-	_, sk, err := ntrulpr653.Scheme().GenerateKeyPair()
+	_, sk, err := sntrup653.Scheme().GenerateKeyPair()
 	assertNil(t, err)
 
 	skM, err := sk.MarshalBinary()

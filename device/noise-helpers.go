@@ -9,7 +9,7 @@ import (
 	"crypto/hmac"
 	"hash"
 
-	"github.com/cloudflare/circl/kem/ntruprime/ntrulpr653"
+	"github.com/cloudflare/circl/kem/ntruprime/sntrup653"
 	"golang.org/x/crypto/blake2s"
 )
 
@@ -90,7 +90,7 @@ func (sk *NoisePrivateKey) publicKey() (pk NoisePublicKey) {
 	// apk := (*[NoisePublicKeySize]byte)(&pk)
 	// ask := (*[NoisePrivateKeySize]byte)(sk)
 	// curve25519.ScalarBaseMult(apk, ask)
-	priv, err := ntrulpr653.Scheme().UnmarshalBinaryPrivateKey((*sk)[:])
+	priv, err := sntrup653.Scheme().UnmarshalBinaryPrivateKey((*sk)[:])
 	if err != nil {
 		return NoisePublicKey{}
 	}
