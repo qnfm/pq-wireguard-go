@@ -174,7 +174,7 @@ func BenchmarkHandshake(b *testing.B) {
 }
 
 func TestNoiseHanshakeSizes(t *testing.T) {
-	fmt.Printf("Message init size %v bytes, message response size %+v bytes\n", MessageInitiationSize, MessageResponseSize)
+	fmt.Printf("KEM details:\n %s\nMessage init size %v bytes, message response size %+v bytes\n", "kyber512", MessageInitiationSize, MessageResponseSize)
 }
 
 func TestKem(t *testing.T) {
