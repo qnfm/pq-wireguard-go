@@ -12,8 +12,6 @@ import (
 	"sync"
 	"time"
 
-	// "github.com/cloudflare/circl/kem/kyber/kyber512"
-
 	"github.com/open-quantum-safe/liboqs-go/oqs"
 	"golang.org/x/crypto/blake2s"
 	"golang.org/x/crypto/chacha20poly1305"

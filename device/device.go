@@ -13,8 +13,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/cloudflare/circl/kem/kyber/kyber512"
 	"github.com/lukechampine/fastxor"
+	"github.com/open-quantum-safe/liboqs-go/oqs"
 	"golang.org/x/crypto/blake2s"
 	"golang.zx2c4.com/wireguard/conn"
 	"golang.zx2c4.com/wireguard/ratelimiter"
@@ -557,17 +557,16 @@ func (device *Device) PrintDevice() {
 }
 
 func GenerateDeviceKeys() ([]byte, []byte) {
-	pk, sk, err := kyber512.Scheme().GenerateKeyPair()
+	kemName := "BIKE-L1"
+	kem := oqs.KeyEncapsulation{}
+	defer kem.Clean() // clean up even in case of panic
+	if err := kem.Init(kemName, nil); err != nil {
+		return nil, nil
+	}
+	pk, err := kem.GenerateKeyPair()
 	if err != nil {
 		return nil, nil
 	}
-	skM, err := sk.MarshalBinary()
-	if err != nil {
-		return nil, nil
-	}
-	pkM, err := pk.MarshalBinary()
-	if err != nil {
-		return nil, nil
-	}
-	return []byte(base64.StdEncoding.EncodeToString(pkM)), []byte(base64.StdEncoding.EncodeToString(skM))
+	sk := kem.ExportSecretKey()
+	return []byte(base64.StdEncoding.EncodeToString(pk)), []byte(base64.StdEncoding.EncodeToString(sk))
 }
