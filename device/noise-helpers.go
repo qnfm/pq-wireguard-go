@@ -9,7 +9,6 @@ import (
 	"crypto/hmac"
 	"hash"
 
-	"github.com/cloudflare/circl/kem/mceliece/mceliece348864f"
 	"golang.org/x/crypto/blake2s"
 )
 
@@ -86,20 +85,20 @@ func setZero(arr []byte) {
 // }
 
 // KEM: Pack sk's pub key
-func (sk *NoisePrivateKey) publicKey() (pk NoisePublicKey) {
-	// apk := (*[NoisePublicKeySize]byte)(&pk)
-	// ask := (*[NoisePrivateKeySize]byte)(sk)
-	// curve25519.ScalarBaseMult(apk, ask)
-	priv, err := mceliece348864f.Scheme().UnmarshalBinaryPrivateKey((*sk)[:])
-	if err != nil {
-		return NoisePublicKey{}
-	}
-	buf, err := priv.Public().MarshalBinary()
-	if err != nil {
-		return NoisePublicKey{}
-	}
-	return NoisePublicKey(buf)
-}
+// func (sk *NoisePrivateKey) publicKey() (pk NoisePublicKey) {
+// 	// apk := (*[NoisePublicKeySize]byte)(&pk)
+// 	// ask := (*[NoisePrivateKeySize]byte)(sk)
+// 	// curve25519.ScalarBaseMult(apk, ask)
+// 	priv, err := mceliece348864f.Scheme().UnmarshalBinaryPrivateKey((*sk)[:])
+// 	if err != nil {
+// 		return NoisePublicKey{}
+// 	}
+// 	buf, err := priv.Public().MarshalBinary()
+// 	if err != nil {
+// 		return NoisePublicKey{}
+// 	}
+// 	return NoisePublicKey(buf)
+// }
 
 // var errInvalidPublicKey = errors.New("invalid public key")
 

@@ -11,7 +11,8 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/cloudflare/circl/kem/mceliece/mceliece348864f"
+	"github.com/open-quantum-safe/liboqs-go/oqs"
+
 	"golang.zx2c4.com/wireguard/conn"
 	"golang.zx2c4.com/wireguard/tun/tuntest"
 )
@@ -23,15 +24,19 @@ func assertBNil(b *testing.B, err error) {
 }
 
 func randBDevice(b *testing.B) *Device {
-	_, sk, err := mceliece348864f.Scheme().GenerateKeyPair()
-	assertBNil(b, err)
-	skM, err := sk.MarshalBinary()
-	assertBNil(b, err)
+	kem := oqs.KeyEncapsulation{}
+	defer kem.Clean() // clean up even in case of panic
 
+	if err := kem.Init(StaticKemName, nil); err != nil {
+		return nil
+	}
+	pk, err := kem.GenerateKeyPair()
+	assertBNil(b, err)
+	sk := kem.ExportSecretKey()
 	tun := tuntest.NewChannelTUN()
 	logger := NewLogger(LogLevelError, "")
 	device := NewDevice(tun.TUN(), conn.NewDefaultBind(), logger)
-	device.SetPrivateKey(NoisePrivateKey(skM))
+	device.SetPrivateKey(NoisePrivateKey(sk), NoisePublicKey(pk))
 	return device
 }
 
@@ -41,8 +46,8 @@ func BenchmarkHandshakeServer(b *testing.B) {
 		dev1 := randBDevice(b)
 		dev2 := randBDevice(b)
 
-		peer1, _ := dev2.NewPeer(dev1.staticIdentity.privateKey.publicKey())
-		peer2, _ := dev1.NewPeer(dev2.staticIdentity.privateKey.publicKey())
+		peer1, _ := dev2.NewPeer(dev1.staticIdentity.publicKey)
+		peer2, _ := dev1.NewPeer(dev2.staticIdentity.publicKey)
 
 		peer1.Start()
 		peer2.Start()
@@ -71,8 +76,8 @@ func BenchmarkHandshakeClient(b *testing.B) {
 		dev1 := randBDevice(b)
 		dev2 := randBDevice(b)
 
-		peer1, _ := dev2.NewPeer(dev1.staticIdentity.privateKey.publicKey())
-		peer2, _ := dev1.NewPeer(dev2.staticIdentity.privateKey.publicKey())
+		peer1, _ := dev2.NewPeer(dev1.staticIdentity.publicKey)
+		peer2, _ := dev1.NewPeer(dev2.staticIdentity.publicKey)
 
 		peer1.Start()
 		peer2.Start()
@@ -106,9 +111,9 @@ func BenchmarkHandshake(b *testing.B) {
 		dev1 := randBDevice(b)
 		dev2 := randBDevice(b)
 
-		peer1, _ := dev2.NewPeer(dev1.staticIdentity.privateKey.publicKey())
+		peer1, _ := dev2.NewPeer(dev1.staticIdentity.publicKey)
 
-		peer2, _ := dev1.NewPeer(dev2.staticIdentity.privateKey.publicKey())
+		peer2, _ := dev1.NewPeer(dev2.staticIdentity.publicKey)
 
 		peer1.Start()
 		peer2.Start()
@@ -178,20 +183,23 @@ func TestNoiseHanshakeSizes(t *testing.T) {
 }
 
 func TestKem(t *testing.T) {
-	_, sk1, err := mceliece348864f.Scheme().GenerateKeyPair()
+	kem1 := oqs.KeyEncapsulation{}
+	defer kem1.Clean() // clean up even in case of panic
+	assertNil(t, kem1.Init(StaticKemName, nil))
+	pk1, err := kem1.GenerateKeyPair()
 	assertNil(t, err)
 
-	_, sk2, err := mceliece348864f.Scheme().GenerateKeyPair()
+	kem2 := oqs.KeyEncapsulation{}
+	defer kem2.Clean() // clean up even in case of panic
+	assertNil(t, kem2.Init(StaticKemName, nil))
+	pk2, err := kem2.GenerateKeyPair()
 	assertNil(t, err)
 
-	pk1 := sk1.Public()
-	pk2 := sk2.Public()
+	ct1, ss1, err1 := kem1.EncapSecret(pk1)
+	ss1d, err2 := kem1.DecapSecret(ct1)
 
-	ct1, ss1, err1 := sk1.Scheme().Encapsulate(pk1)
-	ss1d, err2 := sk1.Scheme().Decapsulate(sk1, ct1)
-
-	ct2, ss2, err3 := sk2.Scheme().Encapsulate(pk2)
-	ss2d, err4 := sk2.Scheme().Decapsulate(sk2, ct2)
+	ct2, ss2, err3 := kem2.EncapSecret(pk2)
+	ss2d, err4 := kem2.DecapSecret(ct2)
 
 	if !bytes.Equal(ss1, ss1d) || !bytes.Equal(ss2, ss2d) || err1 != nil || err2 != nil || err3 != nil || err4 != nil {
 		t.Fatal("Failed to compute shared secet")
@@ -199,16 +207,19 @@ func TestKem(t *testing.T) {
 }
 
 func randDevice(t *testing.T) *Device {
-	_, sk, err := mceliece348864f.Scheme().GenerateKeyPair()
-	assertNil(t, err)
+	kem := oqs.KeyEncapsulation{}
+	defer kem.Clean() // clean up even in case of panic
 
-	skM, err := sk.MarshalBinary()
+	if err := kem.Init(StaticKemName, nil); err != nil {
+		return nil
+	}
+	pk, err := kem.GenerateKeyPair()
 	assertNil(t, err)
-
+	sk := kem.ExportSecretKey()
 	tun := tuntest.NewChannelTUN()
 	logger := NewLogger(LogLevelError, "")
 	device := NewDevice(tun.TUN(), conn.NewDefaultBind(), logger)
-	device.SetPrivateKey(NoisePrivateKey(skM))
+	device.SetPrivateKey(NoisePrivateKey(sk), NoisePublicKey(pk))
 	return device
 }
 
@@ -231,10 +242,10 @@ func TestNoiseHandshake(t *testing.T) {
 	defer dev1.Close()
 	defer dev2.Close()
 
-	peer1, err := dev2.NewPeer(dev1.staticIdentity.privateKey.publicKey())
+	peer1, err := dev2.NewPeer(dev1.staticIdentity.publicKey)
 	assertNil(t, err)
 
-	peer2, err := dev1.NewPeer(dev2.staticIdentity.privateKey.publicKey())
+	peer2, err := dev1.NewPeer(dev2.staticIdentity.publicKey)
 	assertNil(t, err)
 
 	peer1.Start()

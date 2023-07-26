@@ -8,7 +8,7 @@ package device
 import (
 	"testing"
 
-	"github.com/cloudflare/circl/kem/mceliece/mceliece348864f"
+	"github.com/open-quantum-safe/liboqs-go/oqs"
 )
 
 func TestCookieMAC1(t *testing.T) {
@@ -19,17 +19,14 @@ func TestCookieMAC1(t *testing.T) {
 		checker   CookieChecker
 	)
 
-	_, sk, err := mceliece348864f.Scheme().GenerateKeyPair()
-	if err != nil {
-		t.Fatal(err)
-	}
-	pk := sk.Public()
-	pkM, err := pk.MarshalBinary()
-	if err != nil {
-		t.Fatal(err)
-	}
-	generator.Init(NoisePublicKey(pkM))
-	checker.Init(NoisePublicKey(pkM))
+	kem := oqs.KeyEncapsulation{}
+	defer kem.Clean() // clean up even in case of panic
+	assertNil(t, kem.Init(StaticKemName, nil))
+	pk, err := kem.GenerateKeyPair()
+	assertNil(t, err)
+	sk := kem.ExportSecretKey()
+	generator.Init(NoisePublicKey(pk))
+	checker.Init(NoisePublicKey(sk))
 
 	// check mac1
 

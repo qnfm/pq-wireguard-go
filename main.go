@@ -64,7 +64,11 @@ func main() {
 	}
 
 	if len(os.Args) == 2 && os.Args[1] == "--keygen" {
-		pk, sk := device.GenerateDeviceKeys()
+		pk, sk, err := device.GenerateDeviceKeys()
+		if err != nil {
+			fmt.Printf("Generate failed%v", err)
+			printUsage()
+		}
 		fmt.Printf("public_key=%s\n", pk)
 		fmt.Printf("private_key=%s\n", sk)
 		return

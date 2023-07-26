@@ -8,22 +8,20 @@ package device
 import (
 	"crypto/subtle"
 	"encoding/base64"
-
-	"github.com/cloudflare/circl/kem/kyber/kyber512"
-	"github.com/cloudflare/circl/kem/mceliece/mceliece348864f"
 )
 
 const (
-	NoisePublicKeySize    = mceliece348864f.PublicKeySize
-	NoisePrivateKeySize   = mceliece348864f.PrivateKeySize
+	NoisePublicKeySize    = 261120
+	NoisePrivateKeySize   = 6492
 	NoisePresharedKeySize = 32
+	StaticKemName         = "Classic-McEliece-348864f"
 )
 
 type (
 	NoisePublicKey    [NoisePublicKeySize]byte
-	NoiseEPublicKey   [kyber512.PublicKeySize]byte
+	NoiseEPublicKey   [800]byte
 	NoisePrivateKey   [NoisePrivateKeySize]byte
-	NoiseEPrivateKey  [kyber512.PrivateKeySize]byte
+	NoiseEPrivateKey  [1632]byte
 	NoisePresharedKey [NoisePresharedKeySize]byte
 	NoiseNonce        uint64 // padded to 12-bytes
 )

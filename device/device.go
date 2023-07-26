@@ -13,8 +13,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/cloudflare/circl/kem/mceliece/mceliece348864f"
 	"github.com/lukechampine/fastxor"
+	"github.com/open-quantum-safe/liboqs-go/oqs"
 	"golang.org/x/crypto/blake2s"
 	"golang.zx2c4.com/wireguard/conn"
 	"golang.zx2c4.com/wireguard/ratelimiter"
@@ -232,7 +232,7 @@ func (device *Device) IsUnderLoad() bool {
 }
 
 // Set the KEM keys
-func (device *Device) SetPrivateKey(sk NoisePrivateKey) error {
+func (device *Device) SetPrivateKey(sk NoisePrivateKey, pk NoisePublicKey) error {
 	// lock required resources
 
 	device.staticIdentity.Lock()
@@ -242,7 +242,7 @@ func (device *Device) SetPrivateKey(sk NoisePrivateKey) error {
 	// 	return nil
 	// }
 
-	if subtle.ConstantTimeCompare(sk[:], device.staticIdentity.privateKey[:]) == 1 {
+	if subtle.ConstantTimeCompare(sk[:], device.staticIdentity.privateKey[:]) == 1 && subtle.ConstantTimeCompare(pk[:], device.staticIdentity.publicKey[:]) == 1 {
 		return nil
 	}
 
@@ -257,9 +257,8 @@ func (device *Device) SetPrivateKey(sk NoisePrivateKey) error {
 
 	// remove peers with matching public keys
 
-	publicKey := sk.publicKey()
 	for hk, peer := range device.peers.keyMap {
-		if peer.handshake.remoteStatic.Equals(publicKey) {
+		if peer.handshake.remoteStatic.Equals(pk) {
 			peer.handshake.mutex.RUnlock()
 			removePeerLocked(device, peer, hk)
 			peer.handshake.mutex.RLock()
@@ -269,8 +268,8 @@ func (device *Device) SetPrivateKey(sk NoisePrivateKey) error {
 	// update key material
 
 	device.staticIdentity.privateKey = sk
-	device.staticIdentity.publicKey = publicKey
-	device.cookieChecker.Init(publicKey)
+	device.staticIdentity.publicKey = pk
+	device.cookieChecker.Init(pk)
 
 	// do static-static DH pre-computations
 
@@ -557,18 +556,18 @@ func (device *Device) PrintDevice() {
 	device.log.Verbosef("Device info:\nSK: %x\nPK: %x\npeer: %+v\n", device.staticIdentity.privateKey, device.staticIdentity.publicKey, device.peers.keyMap)
 }
 
-func GenerateDeviceKeys() ([]byte, []byte) {
-	pk, sk, err := mceliece348864f.Scheme().GenerateKeyPair()
-	if err != nil {
-		return nil, nil
+func GenerateDeviceKeys() (publickey []byte, privatekey []byte, err error) {
+	kem := oqs.KeyEncapsulation{}
+	defer kem.Clean() // clean up even in case of panic
+
+	if err = kem.Init(StaticKemName, nil); err != nil {
+		return nil, nil, err
 	}
-	skM, err := sk.MarshalBinary()
+
+	pk, err := kem.GenerateKeyPair()
 	if err != nil {
-		return nil, nil
+		return nil, nil, err
 	}
-	pkM, err := pk.MarshalBinary()
-	if err != nil {
-		return nil, nil
-	}
-	return []byte(base64.StdEncoding.EncodeToString(pkM)), []byte(base64.StdEncoding.EncodeToString(skM))
+	sk := kem.ExportSecretKey()
+	return []byte(base64.StdEncoding.EncodeToString(pk)), []byte(base64.StdEncoding.EncodeToString(sk)), nil
 }
