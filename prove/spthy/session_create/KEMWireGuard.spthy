@@ -1,0 +1,625 @@
+/*
+ * Protocol:    Post-Quantum Wireguard protocol
+ * Modeler:     Kai-Chun Ning
+ * Date:        2020
+ * Based on:    Joint work of Kevin Milner & Jason Donenfeld, see
+                https://www.wireguard.com/formal-verification/
+ * command:     Due to memory requirements, it is advised to prove each group
+ *              of lemmas (or even each lemma) separately with the command:
+ *              tamarin_prover --prove=$GROUP_PREFIX pq_wireguard.spthy
+ *
+ * TODO:
+ * - Implement identity hiding with observational equivalence, instead of
+ *      surrogate-based property.
+ * - Prove indistinguishability using observational equivalence.
+ * - Reduce memory requirement.
+ */
+
+theory PQWireGuard
+begin
+heuristic: i
+
+builtins: hashing, asymmetric-encryption, xor
+
+/* Normally an aead would be arity 4, but in the handshake the nonce is always
+ * the fixed value 0 so for legibility we do not include it. */
+functions: aead/3, decrypt/2, verify/3, true/0
+/* The plaintext can be recovered with the key */
+equations: decrypt(aead(k, p, a), k) = p
+/* The authentication can be checked with the key and AAD */
+equations: verify(aead(k, p, a), a, k) = true
+
+/* for the PRF trick that mitigates a compromised RNG */
+functions: prf/2
+
+/* This restriction tells Tamarin that whenever an Eq( ) fact occurs,
+ * the terms in it must be equal. This allows us to model rules that
+ * only trigger if e.g. the AEAD correctly verifies */
+restriction Eq_testing: "All x y #i. Eq(x, y) @ i ==> x = y"
+
+/* We assume that a timestamp from an initiator can only be accepted once by a
+ * responder */
+restriction OnlyOnce:
+    "All i r t #i #j. OnlyOnce(i, r, t) @ i & OnlyOnce(i, r, t) @ j ==> #i = #j"
+
+/* These are mostly used to influence Tamarin's heuristics. They can be
+ * commented out by prefixing them with ' */
+
+/* These defines are for the heuristic goal sorting. F_ indicates that the
+ * heuristic should prioritize solving it, which we use to solve for where
+ * agents got various constraints (like the keys, and key relationships) */
+
+/* L_ indicates the heuristic should deprioritize solving the goal. In this
+ * case, typically agent state can come from just about anywhere so it creates
+ * a ton of case distinctions when we're usually only interested in the current
+ * session anyway. */
+
+
+/* === Setup and key reveal rules === */
+
+/* Keygen is separate from pairing to allow keys to be paired
+ * more than once (if they were generated fresh in the pairing
+ * this would not be possible */
+rule AgentKeyGen:
+    [ Fr(~ltk) ] --[ StaticKey(pk(~ltk)) ]-> [ !F_AgentKey(~ltk), Out(pk(~ltk)) ]
+
+/* Semi-malicious or ignorant agents might share a PSK with multiple
+ * parties, so we overapproximate this by allowing the same PSK to be reused
+ * arbitrarily. If this finds an attack then it may not be a 'real'
+ * attack, but if it doesn't then there is no problem with PSK reuse. */
+rule PSKKeyGen:
+    [ Fr(~psk) ] --[ PSKey(~psk) ]-> [ !F_AgentPSK(~psk) ]
+
+/* Generate one secret for the PRF trick. */
+rule PRFKeyGen:
+    [ Fr(~k) ] --[ PRFKey(~k) ]-> [ !F_AgentPRFK(~k) ]
+
+/* Generate one default PSK */
+rule DefaultPSKGen:
+    let pkA = pk(~ltkA)
+	pkB = pk(~ltkB)
+	psk = h(pkA XOR pkB) in
+    [ !F_AgentKey(~ltkA)
+    , !F_AgentKey(~ltkB) ]--[
+      DefaultPSK(pkA, psk)
+    , DefaultPSK(pkB, psk)
+    , Reveal_PSK(psk)
+    ]->
+    [ // the adversary can easily derive the same psk
+      Out(psk)
+    , !F_AgenPSK(psk)
+    ]
+
+/* Key Reveals for our adversary model. These allow the adversary to reveal
+ * any of the keys below at any time, unless restricted in the lemma we wish
+ * to prove. */
+rule PSK_reveal: 
+    [ !F_AgentPSK(k) ] --[ Reveal_PSK(k) ]-> [ Out(k) ]
+
+rule AgentKey_reveal:
+    [ !F_AgentKey(k) ] --[ Reveal_AK(pk(k)) ]-> [ Out(k) ]
+
+rule EphKey_reveal:
+    [ !F_AgentEphKey(k) ] --[ Reveal_EphK(pk(k)) ]-> [ Out(k) ]
+
+/* This rule models a broken/compromised RNG */
+rule Rnd_reveal:
+    [ !F_AgentRand(k) ] --[ Reveal_rnd(k) ]-> [ Out(k) ]
+
+/* This rule models a compromised PRF key */
+rule PRFK_reveal:
+    [ !F_AgentPRFK(k) ] --[ Reveal_prfk(k) ]-> [ Out(k) ]
+
+/* Models an agent adding anothers public key out-of-band, we assume that
+ * all relationships set up this way are 'sane' and both of the keys involved
+ * were generated fresh. */
+rule AddPublicKey:
+    let pkB = pk(~ltkB) in
+    [ !F_AgentKey(~ltkA)
+    , !F_AgentKey(~ltkB)
+    , !F_AgentPSK(~psk)
+    , !F_AgentPRFK(~tpk)
+    , Fr(~id)
+    ]-->
+    [ /* For search efficiency, state is divided into
+       * an invariant portion and a variant portion. This
+       * allows tamarin to immediately bind the keys back
+       * to this initial pairing rule. The fresh ~id is used
+       * to identify this pairing. */
+      L_State(~id, 'no_message_state')
+    , !F_StateInvariants(~id, ~psk, ~ltkA, pkB, ~tpk)
+    ]
+
+/* === Message Rules === */
+
+rule Handshake_Init:
+    let pkI   = pk(~ltkI)
+        /* Use PRF trick to generate kb. */
+        kb    = prf(~tpk, ~r3)
+        pekI  = pk(~ekI)
+        /* Constructing the init message m1: */
+        cii   = h('noise')
+        hii   = h(cii, 'id', pkR)
+        // ci0   = h(cii, pekI, '1')
+        // hi0   = h(hii, pekI)
+        sct   = aenc{kb}pkR
+        ci0   = h(cii, sct, '1')
+        hi0   = h(hii, sct)
+        ci1   = h(ci0, kb, '1')
+        ki1   = h(ci0, kb, '2')
+        astat = aead(ki1, <h(pkI), ~pkISurrogate>, hi0) // encrypt hash of pkI
+        //add
+        ki3   = h(ci1, astat, '1')
+        astat2 = aead(ki3, pekI, hi0) // encrypt hash of pkI
+
+
+        hi1   = h(hi0, astat2)
+        ci2   = h(ci1, ~psk, '1')
+        ki2   = h(ci1, ~psk, '2')
+        ats   = aead(ki2, <$ts, 'TAI64N'>, hi1)              // encrypt timestamp
+        hi2   = h(hi1, ats)
+        /* NOTE: MACs used in the DDoS protection are not modeled, so we assume
+         * they are some arbitrary public values (i.e. known to the adversary,
+         * like a fixed string). */
+        m1    = <'1', ~sidI, sct, astat2, astat, ats, $mac1, $mac2> in
+    [ /* Init can be triggered at any time, even when currently performing
+       * another role or on another stage. This could happen e.g. because of a timeout.
+       * As such we bind the previous state as 'anything' and discard it. */
+      L_State(~id, anything)
+    , !F_StateInvariants(~id, ~psk, ~ltkI, pkR, ~tpk)
+    , Fr(~r3)
+    , Fr(~ekI)
+    , Fr(~sidI)
+    , Fr(~pkISurrogate) // approximate identity hiding
+    ]--[
+      ISend(<pkI, pkR, pekI, ~psk, kb>)
+    , Identity_Surrogate(~pkISurrogate)
+    , EphKey(~ekI)
+    , PRFGen(~tpk, ~r3, kb)
+    ]->
+    [ L_State(~id, <'init', ~sidI, ~ekI, ci2, hi2, kb>)
+      /* F_SolveInit is a bit of a hack to help with Tamarin's heuristics. It
+       * allows Tamarin to prioritize solving backwards from the
+       * Handshake_Complete rule even though the L_State() fact is
+       * deprioritized by the m4 definitions above. This will not be necessary
+       * in a future version of Tamarin. */
+    , F_SolveInit(~id, ~psk, <'init', ~sidI, ~ekI, ci2, hi2, kb>)
+    , Out(m1)
+    , !F_AgentEphKey(~ekI)
+    , !F_AgentRand(~r3)
+    ]
+
+rule Handshake_Resp:
+    let pkR   = pk(~ltkR)
+        /* Use PRF trick to generate ka and k */
+        ka    = prf(~tpk, ~r1)
+        k     = prf(~tpk, ~r2)
+        m1    = <'1', sidI, sct1, astat2, astat, ats, $mac1, $mac2>  
+        /* Reconstructing what should be in m1: */
+        cri   = h('noise')
+        hri   = h(cri, 'id', pkR)
+        kb    = adec(sct1, ~ltkR)
+
+        // cr0   = h(cri, pekI, '1')
+        // hr0   = h(hri, pekI)
+        cr0   = h(cri, sct1, '1')
+        hr0   = h(hri, sct1)
+        // cr1   = h(cr0, kb, '1')
+        // kr1   = h(cr0, kb, '2')
+        cr1   = h(cr0, kb, '1')
+        kr1   = h(cr0, kb, '2')
+        pair  = decrypt(astat, kr1)
+        hpkIr = fst(pair)         // the hash of pkI
+        surro = snd(pair)         // approximate identity hiding
+        kr3   = h(cr1, astat, '1')
+        pekI  = decrypt(astat2,kr3)
+
+        hr1   = h(hr0, astat2)
+        cr2   = h(cr1, ~psk, '1')
+        kr2   = h(cr1, ~psk, '2')
+        pair  = decrypt(ats, kr2)
+        ts    = fst(pair)
+        fmt   = snd(pair)
+        hr2   = h(hr1, ats)
+        /* Constructing the response message m2: */
+        sct2  = aenc{ka}pkI
+        cr3   = h(cr2, sct2, '1')
+        hr3   = h(hr2, sct2)
+        ect   = aenc{k}pekI
+        cr4   = h(cr3, k, '1')
+        cr5   = h(cr4, ka, '1')
+        cr6   = h(cr5, ~psk, '1')
+        hrt   = h(cr5, ~psk, '2')
+        kr3   = h(cr5, ~psk, '3')
+        hr4   = h(hr3, hrt)
+        aempt = aead(kr3, 'e', hr4)
+        hr5   = h(hr4, aempt)
+        m2    = <'2', sidI, ~sidR, sct2, ect, aempt, $mac1, $mac2> in
+    [ L_State(~id, anything)
+    , !F_StateInvariants(~id, ~psk, ~ltkR, pkI, ~tpk)
+    , Fr(~sidR)
+    , Fr(~r1)
+    , Fr(~r2)
+    , In(m1)
+    ]--[
+        /* In the real protocol, this isn't actually cr6, but is rather derived
+         * from it via some more hashing, but it doesn't make a difference here
+         * -- if the adversary knows cr6, it can compute the derived key. */
+      RKeys(<pkI, pkR, pekI, ~psk, cr6, kb, ka, k>)
+    , Eq(hpkIr, h(pkI))  // check the received hash of pkI
+    , Eq(fmt, 'TAI64N')  // check format of decrypted value is indeed a timestamp
+    , Eq(verify(astat, hr0, kr1), true)
+    , Eq(verify(ats, hr1, kr2), true)
+    , OnlyOnce(pkI, pkR, ts)
+    , PRFGen(~tpk, ~r1, ka)
+    , PRFGen(~tpk, ~r2, k)
+    ]->
+    [ L_State(~id, <'transport_unconfirmed', ~sidR, pekI, cr6, kb, ka, k>)
+    , F_SolveResp(~id, ~psk, <'transport_unconfirmed', ~sidR, pekI, cr6, kb, ka, k>)
+    , Out(m2)
+    , !F_AgentRand(~r1)
+    , !F_AgentRand(~r2)
+    ]
+
+rule Handshake_Complete:
+    let pkI   = pk(~ltkI)
+        pekI  = pk(ekI)
+        m2    = <'2', sidI, sidR, sct, ect, aempt, $mac1, $mac2>
+        /* Reconstruct what should be in m2: */
+        ka    = adec(sct, ~ltkI)
+        ci3   = h(ci2, sct, '1')
+        hi3   = h(hi2, sct)
+        k     = adec(ect, ekI)
+        ci4   = h(ci3, k, '1')
+        ci5   = h(ci4, ka, '1')
+        ci6   = h(ci5, ~psk, '1')
+        hit   = h(ci5, ~psk, '2')
+        ki3   = h(ci5, ~psk, '3')
+        hi4   = h(hi3, hit)
+        er    = decrypt(aempt, ki3)
+        hi5   = h(hi4, aempt)
+        /* Assume the first transport message is 'as weak as possible', i.e.
+         * all values in it are public other than the key used to encrypt. */
+        mtr   = <'4', sidR, aead(ci6, 'message', '0')> in
+    [ L_State(~id,<'init', sidI, ekI, ci2, hi2, kb>)
+    , F_SolveInit(~id, ~psk, <'init', sidI, ekI, ci2, hi2, kb>)
+    , !F_StateInvariants(~id, ~psk, ~ltkI, pkR, ~tpk)
+    , In(m2)
+    ]--[
+      /* Check the content of aempt and use the local state hi4 as AAD to
+       * verify the aempt. This is crucial for preventing a MitM attack which
+       * results in DDoS (but the secrecy is not compromised.) */
+      Eq(er, 'e')
+    , Eq(verify(aempt, hi4, ki3), true)
+      /* In the real protocol, this isn't actually ci6, but is rather derived
+       * from it via some more hashing, but it doesn't make a difference here
+       * (as with cr6 above). */
+    , IKeys(<pkI, pkR, pekI, ~psk, ci6, kb, ka, k>)
+    ]->
+    [ L_State(~id, <'transport', sidI, ci6>)
+    , Out(mtr)
+    ]
+
+/* === Key Confirmation ===
+ *
+ * For proving agreement properties after the first transport message
+ * This is not faithfully modelled, since we don't care about the contents
+ * of the transport message--instead it's generically 'anything encrypted
+ * with the transport key I just set up'. */
+
+rule R_ConfirmedTransportMessage:
+    let mtr = <'4', ~sidR, data> in
+    [ L_State(~id, <'transport_unconfirmed', ~sidR, pekI, cr6, kb, ka, k>)
+    , F_SolveResp(~id, ~psk, <'transport_unconfirmed', ~sidR, pekI, cr6, kb, ka, k>)
+    , !F_StateInvariants(~id, ~psk, ~ltkR, pkI, ~tpk)
+    , In(mtr)
+    ]--[
+      /* We manually verify this instead of the recomputation used for other
+       * terms above, since R may not know the contents of the message. */
+      Eq(verify(data, '0', cr6), true)
+    , RConfirm(<pkI, pk(~ltkR), pekI, ~psk, cr6, kb, ka, k>)
+    ]->
+    [ L_State(~id, <'transport', ~sidR, cr6>) ]
+
+
+/* === Session Traces === */
+
+/* This lemma takes ~30GB to autoprove, but only a few clicks from GUI. */
+lemma session_create: exists-trace
+    "Ex pki pkr peki psk ck kb ka k #i #j.
+        IKeys(<pki, pkr, peki, psk, ck, kb, ka, k>) @ i
+        & RConfirm(<pki, pkr, peki, psk, ck, kb, ka, k>) @ j & #i < #j"
+
+/* === Agreement Properties === */
+
+lemma session_key_collision[reuse]:
+    "All pki1 pki2 pkr1 pkr2 peki1 peki2 psk1 psk2 ck kb1 kb2 ka1 ka2 k1 k2 r1 r2 r3 tpk1 tpk2 #i #j #i1.
+        // If I and R agree on session key
+        IKeys(<pki1, pkr1, peki1, psk1, ck, kb1, ka1, k1>) @ i
+        & RKeys(<pki2, pkr2, peki2, psk2, ck, kb2, ka2, k2>) @ j
+        & PRFGen(tpk1, r3, kb1) @ i1 & #i1 < #i
+        & PRFGen(tpk2, r1, ka2) @ j & PRFGen(tpk2, r2, k2) @ j
+    ==> // then PSK, ensapsulated secrets, and the ephemeral key must be the same
+        (psk1 = psk2 & kb1 = kb2 & ka1 = ka2 & k1 = k2 & peki1 = peki2) &
+        // and it's not possible to perform UKS on the responder, and
+        (pki1 = pki2) & (
+            // either there's no UKS, or
+            (pkr1 = pkr2) | (
+                // the static key of I or both R's RNG and PRF key are compromised, and
+                ((Ex #j1. Reveal_AK(pkr1) @ j1)
+                    | ((Ex #j1. Reveal_rnd(r3) @ j1) & (Ex #j1. Reveal_prfk(tpk1) @ j1))
+                )
+                // the static key of I's intended recepient
+                & ((Ex #j1. Reveal_AK(pki1) @ j1)
+                    // or both her RNG and PRF key are compromised
+                    | ((Ex #j1. Reveal_rnd(r1) @ j1) & (Ex #j1. Reveal_prfk(tpk2) @ j1))
+                )
+                // and the ephemeral key from I is also compromised
+                & ((Ex #j1. Reveal_EphK(peki1) @ j1)
+                    // or both R's RNG and PRF key are compromised
+                    | ((Ex #j1. Reveal_rnd(r2) @ j1) & (Ex #j1. Reveal_prfk(tpk2) @ j1))
+                )
+            )
+        )"
+
+lemma session_uniq[reuse]:
+    /* For both I and R, a 'confirmed session key' will always be unique (even
+     * if all keys are compromised). This follows from I and R generating random
+     * ephemeral values. Note that this could be violated if the RNG can be
+     * controlled instead of just revealed, which we do not model. */
+    "(All pki pkr peki psk ck kb ka k #i.
+        IKeys(<pki, pkr, peki, psk, ck, kb, ka, k>) @ i
+    ==>
+        not(Ex peki2 #j1. IKeys(<pki, pkr, peki2, psk, ck, kb, ka, k>) @ j1
+            & not(#j1 = #i)
+        )
+    )
+    &(All pki pkr peki psk ck kb ka k #i.
+        RConfirm(<pki, pkr, peki, psk, ck, kb, ka, k>) @ i
+    ==>
+        not(Ex peki2 psk2 #j1. RConfirm(<pki, pkr, peki2, psk2, ck, kb, ka, k>) @ j1
+            & not(#j1 = #i)
+        )
+    )"
+
+
+/* === KCI resistance === */
+/* KCI resistance relies on PSK. And trivially, the attacker can complete the
+ * handshake and obtain the session key. */
+/* Impersonation (without compromising the static key) on the initiator is not
+ * possible without compromising R's static key, or I's RNG and her PRF key. In
+ * addition, the PSK b/w I and R must also be compromised. */
+ 
+lemma KCI_on_initiator_resistance[reuse]:
+    "All pki pkr peki psk ck kb ka k tpk r #i #i1.
+        // If I believes she has completed a handshake with R
+        IKeys(<pki, pkr, peki, psk, ck, kb, ka, k>) @ i
+        & PRFGen(tpk, r, kb) @ i1 & #i1 < #i
+        // but R doesn't have a matching session
+        & not(Ex #j. #j < #i & RKeys(<pki, pkr, peki, psk, ck, kb, ka, k>) @ j)
+    ==> // then the PSK was compromised (or not in use), and
+        (Ex #j. Reveal_PSK(psk) @ j & #j < #i)
+        & ( // either R's static key was compromised, or
+            (Ex #j. Reveal_AK(pkr) @ j & #j < #i)
+            // I's RNG and her PRF keys are both compromised
+            | ((Ex #j. Reveal_rnd(r) @ j) & (Ex #j. Reveal_prfk(tpk) @ j))
+        )"
+
+/* Impersonation on the responder (without compromised the static key) is not
+ * possible without compromising I's static key, or R's RNG and her PRF key. In
+ * addition, the PSK b/w I and R must also be compromised. */
+lemma KCI_on_responder_resistance[reuse]:
+    "All pki pkr peki psk ck kb ka k tpk r #i.
+        // If R believes she has a confirmed session with I
+        RConfirm(<pki, pkr, peki, psk, ck, kb, ka, k>) @ i & PRFGen(tpk, r, ka) @ #i
+        // but I doesn't have a matching session
+        & not(Ex #j. #j < #i & IKeys(<pki, pkr, peki, psk, ck, kb, ka, k>) @ j)
+    ==> // then the PSK was compromised (or not in use), and
+        (Ex #j. Reveal_PSK(psk) @ j & #j < #i)
+        & ( // either I's static key was compromised, or
+            (Ex #j. Reveal_AK(pki) @ j & #j < #i)
+            // R's RNG and her PRF key are both compromised
+            | ((Ex #j. Reveal_rnd(r) @ j) & (Ex #j. Reveal_prfk(tpk) @ j))
+        )"
+
+/* === Unknown Key Share (UKS) Attack Resistance ===
+ * UUKS: unilateral UKS
+ * BUKS: bilateral USK */
+
+/* Note that UKS on initiator could have been avoided if the identity of the
+ * intended responder was mixed into the chaining key. */
+lemma UKS_on_initiator_resistance[reuse]:
+    "All pki pkr1 pkr2 peki1 peki2 psk1 psk2 ck kb ka k tpk1 tpk2 r1 r2 r3 #i #j #i1.
+        // If I and R agree on keys, and it's not the case that
+        IKeys(<pki, pkr1, peki1, psk1, ck, kb, ka, k>) @ i
+        & PRFGen(tpk1, r3, kb) @ i1 & #i1 < #i
+        & RKeys(<pki, pkr2, peki2, psk2, ck, kb, ka, k>) @ j
+        & PRFGen(tpk2, r1, ka) @ j & PRFGen(tpk2, r2, k) @ j & not(
+            // I's intended responder's static key is compromised
+            ((Ex #j1. Reveal_AK(pkr1) @ j1)
+                // or I's RNG and her PRF key are both compromised
+                | ( (Ex #j1. Reveal_rnd(r3) @ j1)
+                    & (Ex #j1. Reveal_prfk(tpk1) @ j1) )
+            )
+            // I's static key is compromised
+            & ((Ex #j1. Reveal_AK(pki) @ j1)
+                // or R's RNG and her PRF key are both compromised
+                | ( (Ex #j1. Reveal_rnd(r1) @ j1)
+                    & (Ex #j1. Reveal_prfk(tpk2) @ j1) )
+            )
+            // and the ephemeral key from I is compromised
+            & ((Ex #j1. Reveal_EphK(peki1) @ j1)
+                // or R's RNG and her PRF key are both compromised
+                | ( (Ex #j1. Reveal_rnd(r2) @ j1)
+                    & (Ex #j1. Reveal_prfk(tpk2) @ j1) )
+            )
+            // and both PSK's are compromised (or not in use)
+            & (Ex #j2. Reveal_PSK(psk1) @ j2) & (Ex #j2. Reveal_PSK(psk2) @ j2)
+        )
+    ==> // then UUKS on initiator is not possible
+        pkr1 = pkr2 & peki1 = peki2 & psk1 = psk2"
+
+/* UKS on initiator is not possible with the default PSK */
+lemma UKS_on_initiator_with_default_psk[reuse]:
+    "not(Ex pki pkr1 pkr2 peki1 peki2 psk1 psk2 ck kb ka k #i #j #i1.
+        IKeys(<pki, pkr1, peki1, psk1, ck, kb, ka, k>) @ i
+        & RKeys(<pki, pkr2, peki2, psk2, ck, kb, ka, k>) @ j
+        & DefaultPSK(pki, psk1) @ i1 & DefaultPSK(pkr1, psk1) @ i1
+        & not(pkr1 = pkr2)
+    )"
+
+/* UKS on responder is not possible, since the responder mixes sct2
+ * ({ka}pkI) which involves the static public key of the (claimed) initiator
+ * into the chaining key. */
+lemma UKS_on_responder_resistance[reuse]:
+    "not(Ex pki1 pki2 pkr peki1 peki2 psk1 psk2 ck kb ka k #i #j.
+        IKeys(<pki1, pkr, peki1, psk1, ck, kb, ka, k>) @ i
+        & RKeys(<pki2, pkr, peki2, psk2, ck, kb, ka, k>) @ j
+        & not(pki1 = pki2)
+    )"
+
+/* === Secrecy Properties === */
+
+lemma key_init_secrecy[reuse]:
+    "All pki pkr peki psk ck kb ka k tpk r #i #j #i1.
+        // If I thinks the handshake is done and she can send the first data
+        IKeys(<pki, pkr, peki, psk, ck, kb, ka, k>) @ i
+        & PRFGen(tpk, r, kb) @ i1
+        // and adversary knows the session key
+        & K(ck) @ j
+    ==> // then the PSK is compromised (or not in use)
+        (Ex #j1. Reveal_PSK(psk) @ j1)
+        // and R's static key is compromised
+        & ((Ex #j1. Reveal_AK(pkr) @ j1)
+            // or both I's RNG and PRF key are compromised
+            | ((Ex #j1. Reveal_rnd(r) @ j1) & (Ex #j1. Reveal_prfk(tpk) @ j1))
+        )"
+
+lemma key_resp_secrecy[reuse]:
+    "All pki pkr peki psk ck kb ka k tpk r #i #j #i1.
+        // If R thinks the key is confirmed and she can accept the first data
+        RConfirm(<pki, pkr, peki, psk, ck, kb, ka, k>) @ i
+        & PRFGen(tpk, r, ka) @ i1 & #i1 < #i
+        // and adversary knows the session key
+        & K(ck) @ j
+    ==> // then the PSK was compromised (or not in use)
+        (Ex #j1. Reveal_PSK(psk) @ j1)
+        // and I's static key is compromised
+        & ((Ex #j1. Reveal_AK(pki) @ j1)
+        // or both R's RNG and PRG key are compromised
+            | ((Ex #j1. Reveal_rnd(r) @ j1) & (Ex #j1. Reveal_prfk(tpk) @ j1))
+        )"
+
+/* This includes forward secrecy */
+lemma key_secrecy:
+    "All pki pkr peki psk ck kb ka k tpk1 tpk2 r1 r2 r3 #i #i2 #i3 #i4.
+        // If I and R agree on keys 
+        IKeys(<pki, pkr, peki, psk, ck, kb, ka, k>) @ i
+        & PRFGen(tpk1, r1, kb) @ i4
+        & RKeys(<pki, pkr, peki, psk, ck, kb, ka, k>) @ i2
+        & PRFGen(tpk2, r2, ka) @ i2 & PRFGen(tpk2, r3, k) @ i2
+        // and adversary knows the session key
+        & K(ck) @ i3
+    ==> // then the PSK was compromised (or not in use)
+        // and all 3 secrets are compromised.
+        (Ex #j. Reveal_PSK(psk) @ j) & (
+            ( (Ex #j1. Reveal_AK(pki) @ j1)
+                | ((Ex #j1. Reveal_rnd(r2) @ j1) & (Ex #j1. Reveal_prfk(tpk2) @ j1))
+            )
+            & ( (Ex #j1. Reveal_AK(pkr) @ j1)
+                | ((Ex #j1. Reveal_rnd(r1) @ j1) & (Ex #j1. Reveal_prfk(tpk1) @ j1))
+            )
+            & ( (Ex #j1. Reveal_EphK(peki) @ j1)
+                | ((Ex #j1. Reveal_rnd(r3) @ j1) & (Ex #j1. Reveal_prfk(tpk2) @ j1))
+            )
+        )"
+
+lemma encap_init_secrecy[sources]:
+    "All pki pkr peki psk kb tpk r #i.
+        // if I encapsulated a secret kb with the PRF trick
+        ISend(<pki, pkr, peki, psk, kb>) @ i & PRFGen(tpk, r, kb) @ i
+        // and the intended responder's static key is not compromised
+        & not(Ex #j. Reveal_AK(pkr) @ j)
+        // but the attacker knows the encapsulated secret kb
+        & (Ex #j. K(kb) @ j)
+    ==> // then I's RNG and PRF key are both compromised
+        (Ex #j. Reveal_rnd(r) @ j) & (Ex #j. Reveal_prfk(tpk) @ j)"
+
+// Note that the attacker can learn k since it's encapsulated in the ephemeral
+// public key, which can be provided by the attacker.
+lemma encap_resp_secrecy[sources]:
+    "All pki pkr peki psk ck kb ka k tpk r #i.
+        // if R encapsulated secrets ka with the PRF trick
+        RKeys(<pki, pkr, peki, psk, ck, kb, ka, k>) @ i
+        & PRFGen(tpk, r, ka) @ i
+        // and the intended initiator's static key is not compromised
+        & not(Ex #j. Reveal_AK(pki) @ j)
+        // but the attacker knows the encapsulated secret ka
+        & (Ex #j. K(ka) @ j)
+    ==> // then R's RNG and PRF key are both compromised
+        (Ex #j. Reveal_rnd(r) @ j) & (Ex #j. Reveal_prfk(tpk) @ j)"
+
+/* === Additional Security Properties === */
+
+lemma identity_hiding:
+    // Since the public static is always symbolically known to the adversary,
+    // we represent identity hiding by whether the adversary could learn some
+    // other value that is put in the first message at the same position as the
+    // public static.
+    "All pki pkr peki psk kb surrogate tpk r #i #j.
+        // if I sends a handshake init with a particular identity surrogate
+        ISend(<pki, pkr, peki, psk, kb>) @ i & Identity_Surrogate(surrogate) @ i
+        & PRFGen(tpk, r, kb) @ i
+        // and the adversary knows that surrogate for the identity
+        & K(surrogate) @ j
+    ==> // then the adversary compromised R's static key
+        (Ex #j. Reveal_AK(pkr) @ j)
+        // or I's RNG and her PRF key are both compromised
+        | ((Ex #j. Reveal_rnd(r) @ j) & (Ex #j. Reveal_prfk(tpk) @ j))"
+
+lemma replay_attack_resistance:
+    // We show the init msg cannot be replayed. The resp msg can only be
+    // replayed when the encapsulated secret kb in the init msg is the same.
+    // Since kb from a honest initiator is assumed to never repeat, we do not
+    // have to consider this case.  We prove that if a responder accepts two
+    // init msgs with the same kb but with two different timestamps. (Note other
+    // fields in the init msg can be different), then either the responder's key is
+    // compromised, or I's RNG and I's PRF key are compromised.
+    "All pki pkr peki peki2 psk psk2 cr cr2 kb ka ka2 k k2 ts ts2 tpk r #i #i1 #j.
+        // if R receives an init msg containing secret kb
+        RKeys(<pki, pkr, peki, psk, cr, kb, ka, k>) @ i
+        & OnlyOnce(pki, pkr, ts) @ i
+        // and the init msg indeed comes from I
+        & ISend(<pki, pkr, peki, psk, kb>) @ i1 & #i1 < #i
+        & PRFGen(tpk, r, kb) @ i1
+        // and R receives later another init msg containing the same secret kb
+        & RKeys(<pki, pkr, peki2, psk2, cr2, kb, ka2, k2>) @ j & #i < #j
+        // with a different timestamp
+        & OnlyOnce(pki, pkr, ts2) @ j & not(ts = ts2)
+    ==> // then the attacker crafted the second init msg
+        not(Ex #j1. ISend(<pki, pkr, peki2, psk2, kb>) @j1 & #j1 < #j & #i < #j1) & (
+            // by compromising the static key of R
+            (Ex #j1. Reveal_AK(pkr) @ j1 & #j1 < #j)
+            // or by compromising both I's RNG and I's PRF key
+            | ((Ex #j1. Reveal_rnd(r) @ j1) & (Ex #j1. Reveal_prfk(tpk) @ j1))
+        )"
+
+lemma dos_resistance:
+    // Note that without PSK, an attacker can flood an responder with init msgs.
+    // This is because without a PSK, an init msg cannot be authenticated (Even
+    // though only the real honest initiator can reach key agreement with the
+    // responder). In the original Wireguard protocol, DH result of the static keys
+    // of both peers is used for this purpose.
+    "All pki pkr peki psk cr kb ka k #i.
+        // if R accepts an init msg containing secret kb
+        RKeys(<pki, pkr, peki, psk, cr, kb, ka, k>) @ i
+        // but the init msg was crafted by the attacker, either by
+        // encapsulating kb herself or by using a ciphertext created by an
+        // honest initiator that contains kb
+        & not(Ex pki pkr peki1 psk1 #j. ISend(<pki, pkr, peki1, psk1, kb>) @ j & #j < #i)
+    ==> // then the PSK was compromised (or not in use)
+        Ex #j. Reveal_PSK(psk) @ j & #j < #i"
+
+end
+
+// vim: ft=spthy
